@@ -370,6 +370,11 @@ export default function TripLive() {
           <section className="cd-center" aria-label="휴식 알림">
             <div className={`cd-gauge ${gaugeTone}`} role="img" aria-label={`휴식 알림 시간 진행률 ${Math.round(gaugePct * 100)}%`}>
               <svg viewBox="0 0 260 260" aria-hidden="true">
+                <defs>
+                  <linearGradient id="cdGaugeGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#8db2f8" /><stop offset=".5" stopColor="#4d80e8" /><stop offset="1" stopColor="#244a91" /></linearGradient>
+                  <linearGradient id="cdGaugeAmber" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#ffc35c" /><stop offset="1" stopColor="#e98d12" /></linearGradient>
+                  <linearGradient id="cdGaugeMint" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#7fdcae" /><stop offset="1" stopColor="#1e8a5a" /></linearGradient>
+                </defs>
                 <circle cx="130" cy="130" r={R} className="trk" />
                 <circle cx="130" cy="130" r={R} className="bar" strokeDasharray={C} strokeDashoffset={C * (1 - gaugePct)} transform="rotate(-90 130 130)" />
               </svg>
