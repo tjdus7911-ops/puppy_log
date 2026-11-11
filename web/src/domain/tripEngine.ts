@@ -155,6 +155,12 @@ function checkReminder(s: EngineState): EngineEvent[] {
   return out;
 }
 
+/** 여행 중 휴식 알림 간격 변경: 알림 상태를 새 간격 기준으로 다시 계산(이미 지난 단계는 다음 갱신 때 알림) */
+export function changeRestInterval(s: EngineState, minutes: number): EngineState {
+  const m = Math.max(30, Math.min(240, Math.round(minutes)));
+  return { ...s, restIntervalMin: m, reminder: { ...s.reminder, soonNotified: false, dueNotified: false, snoozeUntilSec: null } };
+}
+
 /** 남은 시간(초). 음수면 이미 지남 */
 export function secondsUntilRest(s: EngineState): number {
   if (s.reminder.snoozeUntilSec != null) return s.reminder.snoozeUntilSec - s.drivingSinceRestSec;

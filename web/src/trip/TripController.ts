@@ -13,7 +13,7 @@ import type { DriveLeg, GeoPoint, LegKind, Pet, PlaceCategory, RestSession, Trip
 import { newId } from '../domain/models';
 import { nearestRegion, regionLabel, regionShort } from '../domain/regions';
 import {
-  createEngine, endRest, endTrip, isGpsLost, secondsUntilRest, snooze, startRest, step,
+  changeRestInterval, createEngine, endRest, endTrip, isGpsLost, secondsUntilRest, snooze, startRest, step,
   type EngineEvent, type EngineState, type Motion,
 } from '../domain/tripEngine';
 import { autoTitle, callName } from '../domain/tripText';
@@ -574,6 +574,15 @@ export class TripControllerImpl {
     await this.persist();
     this.emit(true);
     return durationSec;
+  }
+
+  /** 이번 여행의 휴식 알림 간격 변경(반려견 프로필 기본값은 그대로) */
+  setRestInterval(minutes: number) {
+    if (!this.engine || !this.trip) return;
+    this.engine = changeRestInterval(this.engine, minutes);
+    this.trip = { ...this.trip, restIntervalMinutes: this.engine.restIntervalMin };
+    this.emit(true);
+    void this.persist();
   }
 
   setDemoSpeed(mult: number) {

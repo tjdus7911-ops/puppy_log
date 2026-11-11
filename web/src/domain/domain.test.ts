@@ -206,3 +206,16 @@ describe('autoReco (주행 중 자동 추천)', () => {
     expect(isMealTime(new Date(2026, 10, 11, 15, 0).getTime())).toBe(false);
   });
 });
+
+import { changeRestInterval } from './tripEngine';
+describe('여행 중 휴식 알림 간격 변경', () => {
+  it('간격을 바꾸면 새 간격 기준으로 남은 시간·알림이 다시 계산됨', () => {
+    let s = createEngine(0, 90);
+    s = { ...s, drivingSinceRestSec: 70 * 60, reminder: { soonNotified: false, dueNotified: false, snoozeUntilSec: null } };
+    const c = changeRestInterval(s, 60);
+    expect(c.restIntervalMin).toBe(60);
+    expect(c.reminder.dueNotified).toBe(false);
+    expect(changeRestInterval(s, 10).restIntervalMin).toBe(30); // 하한
+    expect(changeRestInterval(s, 999).restIntervalMin).toBe(240); // 상한
+  });
+});
