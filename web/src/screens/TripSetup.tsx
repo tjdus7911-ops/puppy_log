@@ -29,9 +29,17 @@ export default function TripSetup() {
   const route = useRoute();
   const qDest = queryParam(route, 'dest');
   const fromNavi = queryParam(route, 'from') === 'navi';
+  const fromCommunity = queryParam(route, 'from') === 'community';
+  const qLat = Number(queryParam(route, 'lat')), qLng = Number(queryParam(route, 'lng'));
   // 데모 모드에서 '강릉'을 고르면 데모 경로 목적지(경포해변)로 맞춤
   const initial = (() => {
     if (qDest) {
+      // 커뮤니티 게시글의 장소: 이름과 좌표를 그대로 목적지로(데모 경로 근처면 데모 목적지로 맞춤)
+      if (Number.isFinite(qLat) && Number.isFinite(qLng) && qLat && qLng) {
+        const pt = { latitude: qLat, longitude: qLng };
+        if (settings.demoMode && Math.abs(qLat - DEMO_DESTINATION.point.latitude) < 0.06 && Math.abs(qLng - DEMO_DESTINATION.point.longitude) < 0.06) return { text: DEMO_DESTINATION.name, point: DEMO_DESTINATION.point };
+        return { text: qDest, point: pt };
+      }
       if (settings.demoMode && qDest === '강릉') return { text: DEMO_DESTINATION.name, point: DEMO_DESTINATION.point };
       const r = REGIONS.find((x) => x.name === qDest);
       if (r) return { text: r.name, point: r as GeoPoint };
@@ -122,6 +130,7 @@ export default function TripSetup() {
   return (
     <div className="screen no-nav" style={{ paddingBottom: 0 }}>
       <TopBar title="새 여행" right={settings.demoMode ? <span className="badge sample" style={{ marginRight: 8 }}><FlaskConical size={12} />데모 모드</span> : undefined} />
+      {fromCommunity && <div className="hint green" style={{ marginBottom: 12 }}><MapPin size={16} /><div>커뮤니티 게시글의 장소를 목적지로 불러왔어요. 내비게이션 연결은 차량 내비 지원 범위(웹: 카카오맵 링크)를 따라요.</div></div>}
       {fromNavi && <div className="hint" style={{ marginBottom: 12 }}><span className="badge sample" style={{ height: 20 }}>데모</span>차량 내비에 설정된 목적지를 불러왔어요(실제 차량에서는 Pleos NaviHelper 연동 예정).</div>}
 
       <div className="stack" style={{ marginTop: 8 }}>

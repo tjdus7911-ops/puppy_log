@@ -4,7 +4,7 @@
 //  - 최근 7일 안에 완료한 여행  → 여행 완료 홈(+ 일반 홈 항목)
 //  - 그 외                     → 일반 홈
 import { useState, useSyncExternalStore } from 'react';
-import { Bell, BookImage, ChevronRight, Coffee, Navigation, Search, Share2, ShieldCheck, Sparkles, Trees, Waves } from 'lucide-react';
+import { Bell, BellRing, BookImage, MapPinned, ChevronRight, Coffee, Navigation, Search, Share2, ShieldCheck, Sparkles, Trees, Waves } from 'lucide-react';
 import { REGIONS } from '../domain/regions';
 import { SAFETY_ITEMS } from '../domain/plan';
 import { realStats, useStore } from '../app/store';
@@ -14,6 +14,7 @@ import { callName } from '../domain/tripText';
 import { regionShort } from '../domain/regions';
 import type { Trip } from '../domain/models';
 import { TripController } from '../trip/TripController';
+import { useWide } from '../app/useWide';
 import { PawGlyph, PetAvatar } from '../ui/Art';
 import { Sheet } from '../ui/components';
 import { MapView } from '../ui/MapView';
@@ -37,7 +38,48 @@ export default function Home() {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   if (live.active && live.phase === 'at-destination') return <Destination />;
   if (live.active) return <TripLive />;
-  return <IdleHome />;
+  return <IdleWrap />;
+}
+
+/** 차량 가로 화면(대기): 왼쪽 큰 사진 패널 + 오른쪽 기존 홈. 모바일은 기존 홈 그대로 */
+function IdleWrap() {
+  const wide = useWide();
+  if (!wide) return <IdleHome />;
+  return (
+    <div className="car-idle">
+      <CarIdlePanel />
+      <div className="ci-side"><IdleHome /></div>
+    </div>
+  );
+}
+
+function CarIdlePanel() {
+  const { pets, trips } = useStore();
+  const pet = pets[0];
+  const photo = pet?.photoUri ?? trips.find((t) => t.status === 'ended' && t.coverPhotoUri)?.coverPhotoUri ?? null;
+  const fromPet = !!pet?.photoUri;
+  const name = pet ? callName(pet.name) : '우리 강아지';
+  const actions = [
+    { icon: Navigation, t: '스마트 주행', s: '목적지·휴식 계획 세우기', go: () => navigate(pet ? '/trip/setup' : '/pet/new') },
+    { icon: BellRing, t: '휴식 알림', s: pet ? `${pet.restIntervalMinutes}분 간격 · 바꾸기` : '간격 설정', go: () => navigate(pet ? `/pet/${pet.id}` : '/my') },
+    { icon: MapPinned, t: '동반 장소 추천', s: '근처 반려견 동반 장소', go: () => navigate('/explore') },
+  ];
+  return (
+    <section className={`ci-panel ${photo ? '' : 'nophoto'}`} aria-label="출발 준비">
+      {photo ? <img src={photo} alt={pet ? `${pet.name} 사진` : ''} /> : <PhotoFallback size={72} />}
+      {photo && <span className="badge photo ci-src">{fromPet ? '프로필 사진' : '지난 여행 사진'}</span>}
+      <div className="ci-copy">
+        <p className="k"><PawGlyph size={18} color="#fff" />멍로드 · 대기 중</p>
+        <h1>{name}와 떠날<br />준비가 되었어요</h1>
+        <p className="s">{pet ? '목적지를 정하면 맞춤 휴식 계획을 짜드려요.' : '반려견을 먼저 등록해 주세요.'}</p>
+      </div>
+      <div className="ci-acts">
+        {actions.map((a) => (
+          <button key={a.t} onClick={a.go}><span className="ic"><a.icon size={24} /></span><span className="t">{a.t}</span><span className="s">{a.s}</span></button>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function IdleHome() {

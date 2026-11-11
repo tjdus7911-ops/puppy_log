@@ -1,4 +1,4 @@
-// 멍로드 전체 여행 흐름 E2E (21단계, playwright-core + 로컬 Chrome, 데모 모드).
+// 멍로드 전체 여행 흐름 E2E (30단계: 여행 22 + 커뮤니티 7 + 차량 화면 1, playwright-core + 로컬 Chrome, 데모 모드).
 // 사용: npm run build && npx vite preview --port 4173 &  →  node e2e/demo-scenario.mjs [chrome 경로]
 // 데모 주행은 시뮬레이션이며 실제 차량·내비·도로 데이터가 아닙니다.
 import { chromium } from 'playwright-core';
@@ -267,6 +267,121 @@ try {
     await page.getByAltText('공유 이미지 미리보기').waitFor();
     await shot('15-share');
     await page.keyboard.press('Escape');
+  });
+
+  // ───────── 커뮤니티 ─────────
+  await step('여행 기록 → 커뮤니티에 공유하기 (사진·제목·장소 자동)', async () => {
+    await page.goto(`${BASE}#/album?src=demo`);
+    await page.locator('.card-btn').filter({ hasText: /강릉/ }).first().click();
+    await btn('커뮤니티에 공유하기').click();
+    await page.getByText('앨범에서 선택').waitFor();
+    await page.getByText(/여행 기록에서 사진 \d+장을 불러왔어요/).waitFor({ timeout: 10000 });
+    const sel = await page.locator('.ab-item.sel').count();
+    await full('16-album-pick');
+    if (sel < 4) throw new Error(`선택 ${sel}개`);
+    await btn('다음', true).click();
+    return `여행 사진 ${sel}장 자동 선택`;
+  });
+
+  await step('미리보기 편집: 필터·텍스트·메모·자르기·순서·빼기', async () => {
+    await page.locator('.ed-stage').waitFor();
+    await btn('필터').click(); await page.locator('.ed-filters button', { hasText: '따뜻하게' }).click();
+    await btn('텍스트').click(); await page.getByLabel('사진 문구').fill('바다 냄새 가득');
+    await btn('메모').click(); await page.getByLabel('사진 메모').fill('첫 바다 산책');
+    await btn('편집', true).click(); await page.locator('.ed-panel .chip', { hasText: '1:1' }).click();
+    await page.waitForTimeout(400);
+    await btn('뒤로 이동').click();
+    await btn('이 사진 빼기').click();
+    const n = await page.locator('.ed-thumb').count();
+    await full('17-edit');
+    await page.getByRole('button', { name: '다음', exact: true }).click();
+    return `남은 미디어 ${n}개`;
+  });
+
+  await step('게시글 작성: 제목·장소·해시태그·공개 범위 → 게시', async () => {
+    const title = await page.getByLabel('게시글 제목').inputValue();
+    if (!title.includes('강릉')) throw new Error(`제목 ${title}`);
+    await page.getByLabel('게시글 내용').fill('사슴이와 강릉 바다 산책! #바다산책');
+    await page.locator('.cp-place').filter({ hasText: /경포|강릉/ }).waitFor();
+    await btn('게시', true).click();
+    await page.getByText('위치 정보 공개에 동의해 주세요').first().waitFor(); // 동의 없이 게시 불가
+    await page.locator('label.switch:has(input[aria-label="위치 정보 공개 동의"])').click();
+    await page.getByLabel('해시태그 입력').fill('경포해변'); await page.keyboard.press('Enter');
+    await btn('공개 범위 설정').click(); await page.getByRole('button', { name: '팔로워 공개' }).click();
+    await full('18-compose');
+    await btn('게시', true).click();
+    await page.getByText('게시물이').waitFor({ timeout: 10000 });
+    await shot('19-upload-done');
+    return `제목 “${title}”`;
+  });
+
+  await step('게시글 상세(다크): 스와이프 미디어·좋아요·댓글', async () => {
+    await btn('게시글 보러가기').click();
+    await page.locator('.pd').waitFor();
+    const cnt = await page.locator('.pd-top .count-chip').innerText().catch(() => '1/1');
+    await page.getByRole('button', { name: '좋아요' }).click();
+    await page.getByRole('button', { name: '좋아요 취소' }).waitFor();
+    await page.getByRole('button', { name: '댓글', exact: true }).click();
+    await page.getByLabel('댓글 입력').fill('다음엔 같이 가요!'); await page.getByRole('button', { name: '댓글 등록' }).click();
+    await page.getByText('다음엔 같이 가요!').waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByText('#경포해변').waitFor();
+    await shot('20-post-detail');
+    return `미디어 ${cnt}, 좋아요·댓글 저장`;
+  });
+
+  await step('여행지 연동 → 이곳으로 여행하기 → 여행 시작 목적지 자동 입력', async () => {
+    await page.locator('.place-pill').click();
+    await page.getByRole('button', { name: /이곳으로 여행하기/ }).waitFor();
+    await full('21-place');
+    const status = await page.locator('.pv-card .badge').first().innerText();
+    await page.getByRole('button', { name: /이곳으로 여행하기/ }).click();
+    await page.getByText('커뮤니티 게시글의 장소를 목적지로 불러왔어요').waitFor();
+    const v = await page.getByLabel('목적지', { exact: true }).inputValue();
+    if (!v.includes('강릉')) throw new Error(`목적지 ${v}`);
+    return `동반 표시 “${status}” · 목적지 “${v}”`;
+  });
+
+  await step('피드: 내 게시물(이 기기에만 저장) · 예시 게시물 · 신고/차단', async () => {
+    await page.goto(`${BASE}#/community?tab=new`);
+    await page.locator('.post-card').first().waitFor();
+    await page.getByText('내 게시물 · 이 기기에만 저장').first().waitFor();
+    await full('22-feed');
+    await page.locator('.post-card', { hasText: '속초' }).click();
+    await page.getByRole('button', { name: '더보기' }).click();
+    await page.getByRole('button', { name: '게시물 신고' }).click();
+    await page.getByRole('button', { name: '스팸·광고' }).click();
+    await page.getByText('신고를 접수했어요').waitFor();
+    await page.getByRole('button', { name: '더보기' }).click();
+    await page.getByRole('button', { name: '작성자 차단' }).click();
+    await page.locator('.cm-feed').waitFor();
+    if (await page.locator('.post-card', { hasText: '속초' }).count()) throw new Error('차단한 작성자 글이 보임');
+    return '신고 접수 · 차단 후 피드에서 숨김';
+  });
+
+  await step('새 게시물: 기기 사진 2장 → 제목 없이 게시 시 안내 → 게시', async () => {
+    await page.locator('.fab').click();
+    await page.getByText('앨범에서 선택').waitFor();
+    await addPhotos(() => page.getByRole('button', { name: '기기에서 사진·동영상 가져오기' }).click(), 2);
+    await page.getByText(/[3-9]개 선택됨|2개 선택됨/).first().waitFor({ timeout: 10000 }).catch(() => {});
+    const before = await page.locator('.ab-item.sel').count();
+    await btn('다음', true).click();
+    await page.getByRole('button', { name: '다음', exact: true }).click();
+    await page.getByLabel('게시글 제목').fill('');
+    await btn('게시', true).click();
+    await page.getByText('게시글 제목을 입력해 주세요').first().waitFor();
+    await page.getByLabel('게시글 제목').fill('주말 산책 사진');
+    await btn('게시', true).click();
+    await page.getByText('게시물이').waitFor();
+    return `선택 ${before}개 · 제목 검사 동작`;
+  });
+
+  await step('차량 가로 대시보드(1600×900) 확인', async () => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto(`${BASE}#/home`);
+    await page.waitForTimeout(800);
+    await shot('23-car-idle');
+    await page.setViewportSize({ width: 390, height: 844 });
   });
 } finally {
   console.log(results.join('\n'));

@@ -1,5 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { BookOpen, FlaskConical, House, Navigation, Settings, Users, Wifi, WifiOff } from 'lucide-react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Bluetooth, BookOpen, CloudSun, House, MapPin, Navigation, Settings, Signal, Users, Volume2, Wifi, WifiOff } from 'lucide-react';
 import { AppProvider, useStore } from './app/store';
 import { match, navigate, useRoute } from './app/router';
 import { useWide } from './app/useWide';
@@ -20,6 +20,13 @@ import DiaryScreen from './screens/DiaryScreen';
 import PawMap from './screens/PawMap';
 import MyPage from './screens/MyPage';
 import Community from './screens/Community';
+import PostDetail from './screens/community/PostDetail';
+import PlaceView from './screens/community/PlaceView';
+import AlbumPick from './screens/community/AlbumPick';
+import EditMedia from './screens/community/EditMedia';
+import Compose from './screens/community/Compose';
+import UploadDone from './screens/community/UploadDone';
+import { Draft } from './app/community';
 
 export default function App() {
   return (
@@ -67,26 +74,56 @@ function useClock() {
   return now;
 }
 
-/** 상단 상태 바: 시각 · 주행 상태 · 로고 · 네트워크. 차량이 주지 않는 정보(외기온·블루투스 등)는 표시하지 않습니다. */
+/** 주행 속도: 엔진의 누적 거리 ÷ (시뮬레이션) 시간 변화로 계산. 주행 중이 아니면 0 */
+function useSpeedKmh(live: ReturnType<typeof TripController.getSnapshot>) {
+  const [kmh, setKmh] = useState(0);
+  const prev = useRef<{ km: number; t: number } | null>(null);
+  const e = live.engine;
+  useEffect(() => {
+    if (!e || e.status !== 'driving') { prev.current = null; setKmh(0); return; }
+    const cur = { km: e.distanceKm, t: e.lastTick };
+    const p = prev.current;
+    if (!p || cur.t - p.t > 5 * 60_000) { prev.current = cur; return; }
+    if (cur.t - p.t < 2000) return;
+    const v = ((cur.km - p.km) / ((cur.t - p.t) / 3_600_000));
+    if (Number.isFinite(v) && v >= 0 && v < 200) setKmh((old) => Math.round(old ? old * 0.6 + v * 0.4 : v));
+    prev.current = cur;
+  }, [e?.distanceKm, e?.lastTick, e?.status]);
+  return kmh;
+}
+
+/**
+ * 상단 상태 바(시안 구성): 시각 · 기어/주행 상태 · 속도 · 날씨 · 목적지 · 신호/5G/블루투스/음량.
+ * 차량에서 받지 못하는 값(날씨·통신·블루투스·음량)은 ‘데모’ 표시와 함께 보여 주고 실제 값처럼 쓰지 않아요.
+ */
 function StatusBar() {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const online = useOnline();
   const now = useClock();
   const st = live.engine?.status;
-  const gear = !live.active ? null : st === 'driving' ? 'D' : live.arrived || st === 'resting' ? 'P' : null;
+  const gear = !live.active ? 'P' : st === 'driving' ? 'D' : 'P';
+  const speed = useSpeedKmh(live);
+  const demo = live.kind === 'demo';
+  const dest = live.active ? (live.legKind === 'return' ? '집' : live.trip?.destinationName ?? null) : null;
   return (
     <header className="statusbar" role="banner">
-      <span className="num" style={{ fontWeight: 650, fontSize: 17 }}>
+      <span className="num" style={{ fontWeight: 650, fontSize: 18 }}>
         {now.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })}
       </span>
-      {live.active && (
-        <span className="sb-state">
-          {gear && <b>{gear}</b>}
-          {st === 'driving' ? '주행 중' : st === 'resting' ? '휴식 중' : '정차'}
-          {live.kind === 'demo' && <span className="badge sample" style={{ height: 20 }}><FlaskConical size={11} />데모</span>}
-        </span>
-      )}
+      <span className="sb-state">
+        <b>{gear}</b>
+        {live.active ? (st === 'driving' ? '주행 중' : st === 'resting' ? '휴식 중' : '정차') : '대기'}
+      </span>
+      {live.active && <span className="sb-speed num" aria-label={`속도 시속 ${speed}킬로미터`}><b>{speed}</b>km/h</span>}
+      <span className="sb-weather" title="날씨 정보는 연동 전이에요">
+        {demo ? <><CloudSun size={19} />맑음 12°<span className="badge sample" style={{ height: 18 }}>데모</span></> : <><CloudSun size={19} color="var(--text-3)" /><span style={{ color: 'var(--text-3)' }}>날씨 미연동</span></>}
+      </span>
       <span className="sb-logo"><PawGlyph size={22} color="var(--primary)" />멍로드</span>
+      {dest && <span className="sb-dest ellipsis"><MapPin size={15} />{dest}</span>}
+      <span className="sb-icons" title="통신·블루투스·음량은 차량 연동 전 데모 표시예요">
+        <Signal size={18} /><span className="g5">5G</span><Bluetooth size={18} /><Volume2 size={18} />
+        <span className="badge sample" style={{ height: 18 }}>데모</span>
+      </span>
       <span title={online ? '네트워크 연결됨' : '오프라인'} style={{ color: online ? 'var(--text)' : 'var(--error)', display: 'flex' }}>
         {online ? <Wifi size={19} /> : <WifiOff size={19} />}
       </span>
@@ -103,6 +140,7 @@ function Shell() {
 
   useEffect(() => {
     if (!ready) return;
+    void Draft.restore(); // 작성 중이던 게시물 초안 복구
     TripController.restore()
       .then((restored) => { if (restored) toast('진행 중이던 여행을 이어서 기록해요.'); })
       .finally(() => setRestoreChecked(true));
@@ -140,13 +178,19 @@ function Shell() {
   else if ((params = match('/album/:id', path))) screen = <TripDetail id={params.id} route={route} onChanged={reload} />;
   else if (path === '/pawmap') screen = <PawMap />;
   else if (path === '/community') screen = <Community />;
+  else if ((params = match('/community/post/:id/place', path))) screen = <PlaceView id={params.id} />;
+  else if ((params = match('/community/post/:id', path))) screen = <PostDetail id={params.id} route={route} />;
+  else if (path === '/community/new') screen = <AlbumPick />;
+  else if (path === '/community/new/edit') screen = <EditMedia />;
+  else if (path === '/community/new/write') screen = <Compose />;
+  else if (path === '/community/new/done') screen = <UploadDone />;
   else if (path === '/my') screen = <MyPage />;
   else screen = <Home />;
 
   const inFlow = path === '/onboarding' || path.startsWith('/pet/');
   const showNav = !inFlow;
   const activeTab = TABS.find((t) => t.match.some((m) => path === m || path.startsWith(`${m}/`)))?.key;
-  const fullBleed = path === '/trip/live' || (path === '/home' && live.active && live.driving);
+  const fullBleed = path === '/trip/live' || (path === '/home' && live.active && live.driving) || path.startsWith('/community/');
 
   const onHomeLive = path === '/home' && live.active;
   const pill = showNav && live.active && path !== '/trip/live' && !onHomeLive && (

@@ -17,6 +17,7 @@ import {
   type TripPhoto,
   type VisitedPlace,
 } from '../domain/models';
+import type { AuthorBlock, Post, PostComment, PostReport } from '../domain/community';
 
 /** 진행 중인 여행의 복원 정보. leg 가 null 이면 주행하지 않는 단계(여행지 활동 중) */
 export interface ActiveTripSnapshot {
@@ -42,10 +43,14 @@ interface MungRoadDB extends DBSchema {
   tripPhotos: { key: string; value: TripPhoto; indexes: { byTrip: string } };
   driveLegs: { key: string; value: DriveLeg; indexes: { byTrip: string } };
   kv: { key: string; value: unknown };
+  posts: { key: string; value: Post; indexes: { byCreated: number } };
+  postComments: { key: string; value: PostComment; indexes: { byPost: string } };
+  postReports: { key: string; value: PostReport };
+  blocks: { key: string; value: AuthorBlock };
 }
 
 export const DB_NAME = 'mungroad';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export class StorageError extends Error {}
 
@@ -102,6 +107,13 @@ function open() {
           // v2: 여행 세션(phase)과 주행 구간(driveLegs) 분리, 사진 순서·메모
           db.createObjectStore('driveLegs', { keyPath: 'id' }).createIndex('byTrip', 'tripId');
           if (oldVersion >= 1) void migrateV1toV2(transaction as never);
+        }
+        if (oldVersion < 3) {
+          // v3: 커뮤니티(게시물·댓글·신고·차단). 기존 여행 데이터는 건드리지 않습니다.
+          db.createObjectStore('posts', { keyPath: 'id' }).createIndex('byCreated', 'createdAt');
+          db.createObjectStore('postComments', { keyPath: 'id' }).createIndex('byPost', 'postId');
+          db.createObjectStore('postReports', { keyPath: 'id' });
+          db.createObjectStore('blocks', { keyPath: 'authorId' });
         }
       },
     }).catch((e) => {
@@ -279,7 +291,7 @@ export const repo = {
   async deleteTrip(tripId: string) {
     return guard(async () => {
       const db = await getDb();
-      const stores = ['trips', 'tripPets', 'tripLocations', 'restSessions', 'visitedPlaces', 'tripPhotos', 'driveLegs'] as const;
+      const stores = ['trips', 'tripPets', 'tripLocations', 'restSessions', 'visitedPlaces', 'tripPhotos', 'driveLegs', 'posts', 'postComments', 'postReports', 'blocks'] as const;
       const tx = db.transaction([...stores], 'readwrite');
       await tx.objectStore('trips').delete(tripId);
       for (const s of stores.slice(1)) {
@@ -304,10 +316,64 @@ export const repo = {
   },
 
   /** 위치·경로·사진 등 개인정보 포함 데이터 전체 삭제 (반려견 프로필·설정 포함 옵션) */
+  // ── 커뮤니티 (서버 연동 전: 이 기기에만 저장) ──
+  async listPosts(): Promise<Post[]> {
+    return guard(async () => (await (await getDb()).getAll('posts')).sort((a, b) => b.createdAt - a.createdAt));
+  },
+  async getPost(id: string) {
+    return guard(async () => (await getDb()).get('posts', id));
+  },
+  async savePost(p: Post) {
+    return guard(async () => void (await (await getDb()).put('posts', { ...p, updatedAt: Date.now() })));
+  },
+  async deletePost(id: string) {
+    return guard(async () => {
+      const db = await getDb();
+      const tx = db.transaction(['posts', 'postComments'], 'readwrite');
+      await tx.objectStore('posts').delete(id);
+      for (const k of await tx.objectStore('postComments').index('byPost').getAllKeys(id)) await tx.objectStore('postComments').delete(k);
+      await tx.done;
+    });
+  },
+  async commentsOf(postId: string) {
+    return guard(async () => (await (await getDb()).getAllFromIndex('postComments', 'byPost', postId)).sort((a, b) => a.createdAt - b.createdAt));
+  },
+  async addComment(c: PostComment) {
+    return guard(async () => void (await (await getDb()).put('postComments', c)));
+  },
+  async addReport(r: PostReport) {
+    return guard(async () => void (await (await getDb()).put('postReports', r)));
+  },
+  async listReports() {
+    return guard(async () => (await getDb()).getAll('postReports'));
+  },
+  async listBlocks() {
+    return guard(async () => (await getDb()).getAll('blocks'));
+  },
+  async block(b: AuthorBlock) {
+    return guard(async () => void (await (await getDb()).put('blocks', b)));
+  },
+  async unblock(authorId: string) {
+    return guard(async () => void (await (await getDb()).delete('blocks', authorId)));
+  },
+  /** 예시 게시물의 좋아요·저장 등 내 상호작용(서버가 없으므로 기기에만) */
+  async getInteractions(): Promise<Record<string, { liked?: boolean; saved?: boolean }>> {
+    return guard(async () => ((await (await getDb()).get('kv', 'postInteractions')) as Record<string, { liked?: boolean; saved?: boolean }> | undefined) ?? {});
+  },
+  async saveInteractions(v: Record<string, { liked?: boolean; saved?: boolean }>) {
+    return guard(async () => void (await (await getDb()).put('kv', v, 'postInteractions')));
+  },
+  async getPostDraft() {
+    return guard(async () => (await (await getDb()).get('kv', 'postDraft')) ?? null);
+  },
+  async savePostDraft(d: unknown) {
+    return guard(async () => void (await (await getDb()).put('kv', d, 'postDraft')));
+  },
+
   async wipe(opts: { includePets: boolean }) {
     return guard(async () => {
       const db = await getDb();
-      const stores = ['trips', 'tripPets', 'tripLocations', 'restSessions', 'visitedPlaces', 'tripPhotos', 'driveLegs'] as const;
+      const stores = ['trips', 'tripPets', 'tripLocations', 'restSessions', 'visitedPlaces', 'tripPhotos', 'driveLegs', 'posts', 'postComments', 'postReports', 'blocks'] as const;
       for (const s of stores) await db.clear(s);
       await db.delete('kv', 'activeTrip');
       if (opts.includePets) {

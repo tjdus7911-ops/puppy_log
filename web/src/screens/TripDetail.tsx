@@ -1,6 +1,6 @@
 import { drivingLocked } from '../trip/driveLock';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, ArrowRight, Car, Check, ChevronLeft, ChevronRight, Coffee, Download, Flag, FlaskConical, House, ImagePlus, Lock, MapPin, MessageSquare, Navigation, Pencil, Route, Share2, Sparkles, Star, Trash2, Undo2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Car, Check, ChevronLeft, ChevronRight, Coffee, Download, Flag, FlaskConical, House, ImagePlus, Lock, MapPin, MessageSquare, Navigation, Pencil, Route, Share2, Sparkles, Star, Trash2, Undo2, Users, X } from 'lucide-react';
 import { useStore } from '../app/store';
 import { back, navigate, queryParam } from '../app/router';
 import { addPhotosToTrip } from '../app/photos';
@@ -281,8 +281,9 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
         </button>
 
         <div style={{ display: 'grid', gap: 8, textAlign: 'center' }}>
-          <button className="btn secondary block xl" onClick={makeShare}>SNS 공유 카드 만들기</button>
-          <span className="t-cap" style={{ fontSize: 12 }}>집 주소와 GPS 경로는 공유 카드에 포함되지 않아요</span>
+          <button className="btn primary block xl" disabled={driving || inProgress} onClick={() => navigate(`/community/new?trip=${trip.id}`)}><Users size={18} />커뮤니티에 공유하기</button>
+          <button className="btn secondary block" onClick={makeShare}>SNS 공유 카드 만들기</button>
+          <span className="t-cap" style={{ fontSize: 12 }}>{inProgress ? '여행을 완료하면 커뮤니티에 공유할 수 있어요 · ' : ''}커뮤니티 게시물과 공유 카드에는 집 주소·GPS 이동 경로가 포함되지 않아요</span>
         </div>
         {driving && <p className="lock-note"><Lock size={15} />주행 중에는 상세 편집이 잠겨요. 정차 후 이용해 주세요.</p>}
       </div>
