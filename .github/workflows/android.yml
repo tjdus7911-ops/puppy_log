@@ -1,0 +1,28 @@
+# 차량용 Android 앱 빌드·단위 테스트 (Pleos SDK·카카오맵은 Stub으로 빌드 — 키 불필요)
+name: android
+on:
+  push:
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: android } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build & unit test
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest -Pmungroad.usePleosSdk=false -Pmungroad.useKakaoMap=false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mungroad-debug
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/reports/tests/
+          if-no-files-found: warn
