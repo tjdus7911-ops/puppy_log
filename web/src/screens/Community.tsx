@@ -20,6 +20,8 @@ function ago(ts: number) {
 export default function Community() {
   const { toast } = useStore();
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
+  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('all');
+  const [liked, setLiked] = useState<Set<string>>(new Set());
   if (drivingLocked(live)) {
     return (
       <div className="screen">
@@ -28,8 +30,6 @@ export default function Community() {
       </div>
     );
   }
-  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('all');
-  const [liked, setLiked] = useState<Set<string>>(new Set());
   const posts = examplePosts().filter((p) => tab === 'all' || p.kind === tab);
 
   return (

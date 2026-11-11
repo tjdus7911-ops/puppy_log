@@ -2,6 +2,7 @@
 // 정책: 경로 '앞쪽'만, 경로 이탈이 크면 우선순위↓, 같은 장소 반복 금지, 확인된 동반만 '가능'으로 안내
 import type { GeoPoint, PlaceCategory } from './models';
 import { haversineKm } from './geo';
+import { josa } from './tripText';
 
 export type RecoTrigger = 'rest' | 'meal' | 'voice';
 
@@ -77,8 +78,8 @@ const CAT_WORD: Record<PlaceCategory, string> = { restaurant: '음식점', cafe:
 export function suggestionSentence(c: RecoCandidate): string {
   const dist = c.aheadKm < 1 ? `${Math.round(c.aheadKm * 10) * 100}m` : `${Math.round(c.aheadKm)}km`;
   return c.petConfirmed
-    ? `${dist} 앞에 반려견 동반 ${CAT_WORD[c.category]}가 있어요. 들렀다 갈까요?`
-    : `${dist} 앞에 ${CAT_WORD[c.category]}가 있어요. 반려견 동반 여부는 확인이 필요해요. 들렀다 갈까요?`;
+    ? `${dist} 앞에 반려견 동반 ${CAT_WORD[c.category]}${josa(CAT_WORD[c.category], '이', '가')} 있어요. 들렀다 갈까요?`
+    : `${dist} 앞에 ${CAT_WORD[c.category]}${josa(CAT_WORD[c.category], '이', '가')} 있어요. 반려견 동반 여부는 확인이 필요해요. 들렀다 갈까요?`;
 }
 
 /** 짧은 음성 응답: 응/네/좋아 → yes, 괜찮아/아니 → no */

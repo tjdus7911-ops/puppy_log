@@ -62,14 +62,13 @@ try {
     await page.getByPlaceholder('예: 6.5').fill('7.2');
     await page.getByRole('radio', { name: '중형견' }).click();
     await btn('등록하기').click();
-    await page.getByText('어디로 떠나볼까요?').waitFor();
+    await page.getByText('오늘은 어디로 갈까요?').waitFor();
     await page.getByText('사슴').first().waitFor();
     await full('01-home-before');
   });
 
   await step('목적지 강릉 설정 (데모: 차량 내비 목적지 제안)', async () => {
-    await page.getByText('차량 내비에').waitFor();
-    await btn('기록 시작').click();
+    await page.locator('.navi-suggest').click();
     await page.getByText('함께 이동할 반려견').waitFor();
     const v = await page.getByLabel('목적지', { exact: true }).inputValue();
     if (!v.includes('강릉')) throw new Error(`목적지 값: ${v}`);
@@ -77,19 +76,20 @@ try {
   });
 
   await step('출발 전 반려견 맞춤 휴식 계획 확인', async () => {
-    await page.getByText('반려견 맞춤 휴식 계획').waitFor();
-    const card = page.locator('section', { has: page.getByRole('heading', { name: '반려견 맞춤 휴식 계획' }) });
-    const txt = (await card.innerText()).replace(/\s+/g, ' ');
+    await page.getByRole('heading', { name: /맞춤 휴식 계획/ }).waitFor();
+    await page.getByText('예상 휴식').waitFor();
+    const txt = (await page.locator('.screen').first().innerText()).replace(/\s+/g, ' ');
     await btn('300배속').click();
     await full('02-trip-setup-plan');
-    const m = txt.match(/예상 주행 (.+?) 휴식 간격 (\S+) 예상 휴식 (\S+)/);
-    if (!m) throw new Error(`계획 미표시: ${txt.slice(0, 80)}`);
-    return `예상 주행 ${m[1]} · 간격 ${m[2]} · 예상 휴식 ${m[3]}`;
+    const drive = txt.match(/(\d+:\d\d) 예상 주행 시간/)?.[1];
+    const rests = txt.match(/예상 휴식 (\S+) ?회/)?.[1];
+    if (!drive || !rests) throw new Error(`계획 미표시: ${txt.slice(0, 120)}`);
+    return `예상 주행 ${drive} · 예상 휴식 ${rests}회 (추정)`;
   });
 
   await step('여행 시작 (데모 300배속)', async () => {
-    await page.getByRole('button', { name: '여행 시작', exact: true }).click();
-    await page.locator('.stat3').waitFor();
+    await page.getByRole('button', { name: /출발하기/ }).click();
+    await page.locator('.tiles3').waitFor();
     await page.waitForTimeout(2000);
     await shot('03-live-driving');
   });
@@ -105,7 +105,7 @@ try {
     await shot('05-reminder-due');
     await page.keyboard.press('Escape');
     await page.locator('.action', { hasText: '휴식 시작' }).click();
-    await page.locator('.stat3 .k', { hasText: '휴식 시간' }).waitFor();
+    await page.locator('.tile3 .k', { hasText: '휴식 시간' }).waitFor();
     await page.waitForTimeout(1500);
     await page.locator('.action', { hasText: '휴식 종료' }).click();
     await page.waitForTimeout(400);
@@ -131,7 +131,7 @@ try {
 
   await step('도로 위험 정보(데모 표시)', async () => {
     await page.setViewportSize({ width: 1600, height: 900 });
-    await page.locator('.hazard-bar .badge.sample').waitFor({ timeout: 10000 });
+    await page.locator('.hz-pill .badge.sample').waitFor({ timeout: 10000 });
     await page.waitForTimeout(500);
     await shot('07-dashboard-wide-hazard');
     await page.setViewportSize({ width: 390, height: 844 });
@@ -156,8 +156,8 @@ try {
   });
 
   await step('사진 3장 추가', async () => {
-    await addPhotos(() => page.locator('.tile', { hasText: '사진 추가' }).click(), 3);
-    await page.locator('.tile', { hasText: '3장' }).waitFor({ timeout: 10000 });
+    await addPhotos(() => page.locator('.qa .tile', { hasText: '사진 추가' }).click(), 3);
+    await page.locator('.qa .tile', { hasText: '3장' }).waitFor({ timeout: 10000 });
   });
 
   await step('방문 장소 기록', async () => {
@@ -169,7 +169,7 @@ try {
   });
 
   await step('여행 메모 작성', async () => {
-    await page.locator('.tile', { hasText: '메모 작성' }).click();
+    await page.locator('.qa .tile', { hasText: '메모' }).click();
     await page.getByRole('dialog').getByLabel('여행 메모').fill('바다 앞에서 사슴이가 한참 모래를 팠다.');
     await page.getByRole('dialog').getByRole('button', { name: '저장', exact: true }).click();
     await page.locator('.tile', { hasText: '작성됨' }).waitFor();
@@ -178,8 +178,8 @@ try {
 
   await step('돌아가는 길 기록 시작', async () => {
     await btn('돌아가는 길 기록 시작').click();
-    await page.locator('.stat3').waitFor({ timeout: 15000 });
-    await page.getByText(/돌아오는 길|돌아가는 길/).first().waitFor();
+    await page.locator('.tiles3').waitFor({ timeout: 15000 });
+    await page.getByText(/돌아가는 중/).first().waitFor();
     await shot('10-return-driving');
   });
 
@@ -207,7 +207,7 @@ try {
     await page.getByRole('button', { name: /AI 여행 일기/ }).first().click();
     await page.getByRole('heading', { name: 'AI 여행 일기' }).waitFor();
     await page.getByText(/경포 솔숲|모래를 팠다/).first().waitFor({ timeout: 15000 });
-    const d = (await page.locator('.card .t-body').first().innerText()).replace(/\n+/g, ' / ');
+    const d = (await page.locator('.diary-text').first().innerText()).replace(/\n+/g, ' / ');
     await full('12-diary-draft');
     return `“${d.slice(0, 70)}…” (메모·장소만 사용, 템플릿)`;
   });
@@ -224,7 +224,7 @@ try {
     const real = await page.locator('.screen').first().innerText();
     await page.goto(`${BASE}#/pawmap?src=demo`);
     await page.waitForTimeout(400);
-    const cnt = real.replace(/\s+/g, ' ').match(/총 여행 횟수 (\d+)회/)?.[1];
+    const cnt = real.replace(/\s+/g, ' ').match(/(\d+) ?회 총 여행 횟수/)?.[1];
     if (cnt !== '0') throw new Error(`실제 기록 탭 여행 수 ${cnt} (데모가 섞임)`);
     return "'데모 기록' 탭에 강릉 발도장 · 실제 기록 탭은 0회(데모 제외)";
   });

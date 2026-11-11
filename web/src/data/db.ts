@@ -55,7 +55,7 @@ let dbPromise: Promise<IDBPDatabase<MungRoadDB>> | null = null;
 export let storageMode: 'persistent' | 'memory' = 'persistent';
 
 /** 샌드박스 등에서 IndexedDB 를 쓸 수 없으면 메모리 구현으로 바꿔 앱이 멈추지 않게 합니다. */
-async function useMemoryIndexedDb() {
+async function switchToMemoryIndexedDb() {
   const fake = await import('fake-indexeddb');
   const g = globalThis as unknown as Record<string, unknown>;
   for (const [k, v] of Object.entries({ indexedDB: fake.indexedDB, IDBKeyRange: fake.IDBKeyRange, IDBRequest: fake.IDBRequest, IDBTransaction: fake.IDBTransaction, IDBDatabase: fake.IDBDatabase, IDBObjectStore: fake.IDBObjectStore, IDBIndex: fake.IDBIndex, IDBCursor: fake.IDBCursor, IDBCursorWithValue: fake.IDBCursorWithValue, IDBOpenDBRequest: fake.IDBOpenDBRequest, IDBVersionChangeEvent: fake.IDBVersionChangeEvent })) {
@@ -77,7 +77,7 @@ async function openWithFallback() {
     // 일부 샌드박스에서는 open 이 응답 없이 멈추므로 시간 제한을 둡니다.
     return await Promise.race([open(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('indexedDB timeout')), 4000))]);
   } catch {
-    await useMemoryIndexedDb();
+    await switchToMemoryIndexedDb();
     return open();
   }
 }

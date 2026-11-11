@@ -8,14 +8,15 @@ import type { Trip } from '../domain/models';
 import { formatDuration, formatKm, formatShortDate } from '../domain/format';
 import { regionShort } from '../domain/regions';
 import { EmptyState, Segmented, TopBar } from '../ui/components';
-import { PawGlyph, Scene } from '../ui/Art';
+import { PawGlyph } from '../ui/Art';
+import { PhotoFallback } from '../ui/kit';
 
 export function TripCard({ trip, compact = false, subtitle }: { trip: Trip; compact?: boolean; subtitle?: string }) {
   return (
     <button className="card-btn" onClick={() => navigate(`/album/${trip.id}`)} aria-label={`${trip.title} 상세 보기`}>
-      <div className="card" style={{ padding: 0, overflow: 'hidden', display: compact ? 'flex' : 'block' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden', display: compact ? 'flex' : 'block', textAlign: 'left' }}>
         <div style={{ position: 'relative', width: compact ? 112 : '100%', aspectRatio: compact ? '1' : '16 / 9', flex: 'none', background: 'var(--secondary)' }}>
-          {trip.coverPhotoUri ? <img src={trip.coverPhotoUri} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Scene kind="drive" height={compact ? 112 : 200} />}
+          {trip.coverPhotoUri ? <img src={trip.coverPhotoUri} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <PhotoFallback size={compact ? 32 : 48} />}
           {trip.isDemo && <span className="badge sample" style={{ position: 'absolute', left: 8, top: 8 }}><FlaskConical size={12} />데모</span>}
         </div>
         <div style={{ padding: compact ? '12px 14px' : 16, flex: 1, minWidth: 0, textAlign: 'left' }}>
@@ -63,13 +64,13 @@ export default function Album({ route }: { route: string }) {
     <div className="screen">
       <TopBar title="여행 기록" showBack={false} />
       <button className="card-btn" style={{ width: '100%' }} onClick={() => navigate('/pawmap')}>
-        <div className="card row" style={{ gap: 14, background: 'var(--primary)', color: '#fff' }}>
-          <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(255,255,255,.16)', display: 'grid', placeItems: 'center' }}><PawGlyph size={26} color="#fff" /></div>
+        <div className="card row" style={{ gap: 14 }}>
+          <span className="icon-tile"><PawGlyph size={22} color="var(--primary)" /></span>
           <div className="grow">
-            <p style={{ fontWeight: 700 }}>발도장 지도</p>
-            <p style={{ fontSize: 13, opacity: 0.85, marginTop: 2 }}>함께 다녀온 지역을 한눈에 봐요</p>
+            <p style={{ fontWeight: 600 }}>발도장 지도</p>
+            <p className="t-cap" style={{ marginTop: 2 }}>함께 다녀온 지역을 한눈에 봐요</p>
           </div>
-          <ChevronRight size={20} />
+          <ChevronRight size={20} color="var(--text-3)" />
         </div>
       </button>
 

@@ -7,6 +7,7 @@
 //
 // Provider → 엔진 → 저장소 흐름은 v1 과 같고, 앱이 꺼져도 스냅샷으로 어느 단계든 복원합니다.
 // Android 쪽 TripViewModel 에 같은 상태 구조를 옮길 예정입니다(docs/TRIP_LIFECYCLE.md).
+import { activityTime } from './activityTime';
 import { repo, type ActiveTripSnapshot } from '../data/db';
 import type { DriveLeg, GeoPoint, LegKind, Pet, PlaceCategory, RestSession, Trip, TripLocation, TripPhase } from '../domain/models';
 import { newId } from '../domain/models';
@@ -214,7 +215,7 @@ export class TripControllerImpl {
       const kind: StartKind = this.trip.isDemo ? 'demo' : opts.kind ?? (this.trip.source === 'manual' ? 'manual' : 'device-location');
       const legsSoFar = await repo.legsOf(this.trip.id).catch(() => [] as DriveLeg[]);
       const lastEnd = Math.max(0, ...legsSoFar.map((l) => l.endTime ?? 0));
-      const startTime = Math.max(Date.now(), lastEnd); // 데모는 시뮬레이션 시각이 앞서 있을 수 있음
+      const startTime = Math.max(lastEnd, await activityTime(this.trip.id)); // 데모는 시뮬레이션 시각이 앞서 있을 수 있음
       let provider = this.makeProvider(kind, startTime, opts.demoSpeed ?? 60, legKind === 'return' ? 'return' : 'local');
       this.attachLeg(this.newLeg(legKind, startTime, provider), provider, createEngine(startTime, this.trip.restIntervalMinutes));
       let res = await provider.start(this.onSample);
@@ -316,7 +317,7 @@ export class TripControllerImpl {
     if (!p) throw new Error('위치를 알 수 없어 장소를 기록할 수 없어요.');
     await repo.addVisitedPlace({
       id: newId(), tripId: this.trip.id, placeName: name.trim(), category, latitude: p.latitude, longitude: p.longitude,
-      visitedAt: Date.now(), isSample: false, source: 'user', memo: memo.trim(),
+      visitedAt: await activityTime(this.trip.id), isSample: false, source: 'user', memo: memo.trim(),
     });
   }
 

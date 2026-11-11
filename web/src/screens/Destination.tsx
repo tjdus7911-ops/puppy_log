@@ -1,7 +1,7 @@
 // 여행지 활동 홈 (phase 'at-destination'): 목적지 도착 후에도 여행은 계속됩니다.
 // 사진 추가 · 방문 장소 기록 · 여행 메모 · 주변 장소 탐색 · 이동 기록 확인 · 복귀 이동 시작 · 여행 마무리
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Camera, Car, ChevronRight, Compass, Flag, MapPinned, NotebookPen, Route, Undo2 } from 'lucide-react';
+import { Camera, Compass, Flag, ImagePlus, MapPinned, NotebookPen, Pencil, Plus } from 'lucide-react';
 import { useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { addPhotosToTrip } from '../app/photos';
@@ -11,8 +11,11 @@ import { formatDuration, formatKm, formatTime } from '../domain/format';
 import { regionLabel } from '../domain/regions';
 import { TripController } from '../trip/TripController';
 import { completeTripWithDraft } from '../trip/completeTrip';
-import { Hint, Sheet } from '../ui/components';
-import { CategoryIcon, PlaceThumb, Scene } from '../ui/Art';
+import { Sheet } from '../ui/components';
+import { CategoryIcon, PlaceThumb } from '../ui/Art';
+import { PhotoFallback, PlaceRow, SectionHeader, Timeline, type TimelineItem } from '../ui/kit';
+import { getPlaceProvider, sortByDistance } from '../places/providers';
+import type { Place } from '../places/PlaceSearchProvider';
 
 const CATS = Object.keys(CATEGORY_LABEL) as PlaceCategory[];
 
@@ -28,6 +31,17 @@ export default function Destination() {
   const [memo, setMemo] = useState(trip?.memo ?? '');
   const [finishSheet, setFinishSheet] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [nearby, setNearby] = useState<(Place & { distanceKm: number | null })[]>([]);
+  const anchor = live.position ?? trip?.endLocation ?? null;
+  const anchorKey = anchor ? `${anchor.latitude.toFixed(2)},${anchor.longitude.toFixed(2)}` : '';
+  useEffect(() => {
+    if (!anchor) return;
+    const provider = getPlaceProvider(settings.apiBaseUrl);
+    let off = false;
+    Promise.all((['park', 'cafe'] as PlaceCategory[]).map((c) => provider.search({ category: c, centers: [anchor], radiusKm: 6 }).catch(() => [] as Place[])))
+      .then((r) => { if (!off) setNearby(sortByDistance(r.flat(), anchor).slice(0, 2).map((x) => ({ ...x.place, distanceKm: x.distanceKm }))); });
+    return () => { off = true; };
+  }, [anchorKey, settings.apiBaseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tripId = trip?.id;
   useEffect(() => {
@@ -85,68 +99,84 @@ export default function Destination() {
     if (id) { await reload(); navigate(`/album/${id}?new=1`, { replace: true }); }
   };
 
+  const heroPhoto = trip.coverPhotoUri ?? photos[photos.length - 1]?.photoUri ?? null;
+  const events: TimelineItem[] = [
+    ...(trip.arrivedAt ? [{ id: 'arr', at: trip.arrivedAt, icon: <Flag />, title: `${trip.destinationName ?? (trip.endLocation ? regionLabel(trip.endLocation) : '목적지')} 도착`, time: formatTime(trip.arrivedAt), sub: `가는 길 ${formatKm(trip.totalDistanceKm)} · 주행 ${formatDuration(trip.drivingDurationSeconds)}` }] : []),
+    ...places.map((pl) => ({ id: pl.id, at: pl.visitedAt, icon: <MapPinned />, title: pl.placeName, time: formatTime(pl.visitedAt), sub: [CATEGORY_LABEL[pl.category], pl.memo ? `“${pl.memo}”` : null, pl.isSample ? '샘플' : null].filter(Boolean).join(' · ') })),
+    ...(photos.length ? [{ id: 'ph', at: Math.max(...photos.map((x) => x.createdAt)), icon: <Camera />, title: `사진 ${photos.length}장 추가`, time: formatTime(Math.max(...photos.map((x) => x.createdAt))) }] : []),
+  ].sort((x, y) => x.at - y.at);
+
   return (
     <div className="screen">
-      <div className="dest-hero mt-8">
-        <div className="cover" style={{ aspectRatio: '16 / 9' }}>
-          {trip.coverPhotoUri ? <img src={trip.coverPhotoUri} alt="여행 대표 사진" /> : <Scene kind="rest" height={260} />}
-          <span className="badge" style={{ position: 'absolute', left: 12, top: 12, background: 'var(--mint)', color: 'var(--mint-text)', height: 28, padding: '0 12px' }}><MapPinned size={14} />{PHASE_LABEL['at-destination']}</span>
-          {trip.isDemo && <span className="badge sample" style={{ position: 'absolute', right: 12, top: 12 }}>데모 여행</span>}
+      <section className="photo-hero dest-hero" aria-label="여행 대표 사진">
+        {heroPhoto ? <img src={heroPhoto} alt="여행 대표 사진" /> : <PhotoFallback size={72} />}
+        <div className="top">
+          <span className="state-pill"><MapPinned size={14} />{PHASE_LABEL['at-destination']}</span>
+          <span className="row" style={{ gap: 8 }}>
+            {trip.isDemo && <span className="badge sample">데모 여행</span>}
+            <button className="glass-btn" aria-label="사진 추가" onClick={addPhotos}><Camera size={18} /></button>
+          </span>
         </div>
-        <h1 className="h-xl mt-16">{trip.title || '여행지에 도착했어요'}</h1>
-        <p className="t-sub mt-8">
-          {trip.endLocation ? regionLabel(trip.endLocation) : trip.destinationName ?? '목적지'} 도착 {trip.arrivedAt ? formatTime(trip.arrivedAt) : ''} · 가는 길 {formatKm(trip.totalDistanceKm)} · 주행 {formatDuration(trip.drivingDurationSeconds)}
-        </p>
-      </div>
+        <div className="cap" style={heroPhoto ? undefined : { color: 'var(--text)' }}>
+          <h1>{trip.title || '여행지에 도착했어요'}</h1>
+          <p className="num">{trip.endLocation ? regionLabel(trip.endLocation) : trip.destinationName ?? '목적지'} 도착 {trip.arrivedAt ? formatTime(trip.arrivedAt) : ''} · 가는 길 {formatKm(trip.totalDistanceKm)} · 주행 {formatDuration(trip.drivingDurationSeconds)}</p>
+        </div>
+      </section>
 
-      <div className="dest-grid mt-16">
-        <button className="tile" onClick={addPhotos}><Camera size={26} />사진 추가<span className="t-cap">{photos.length}장</span></button>
-        <button className="tile" onClick={() => setPlaceSheet(true)}><MapPinned size={26} />장소 기록<span className="t-cap">{places.length}곳</span></button>
-        <button className="tile" onClick={() => { setMemo(trip.memo); setMemoSheet(true); }}><NotebookPen size={26} />메모 작성<span className="t-cap">{trip.memo ? '작성됨' : '비어 있음'}</span></button>
-        <button className="tile" onClick={() => navigate('/explore')}><Compass size={26} />주변 장소 탐색<span className="t-cap">음식점·카페·산책로</span></button>
-        <button className="tile" onClick={() => navigate(`/album/${trip.id}`)}><Route size={26} />이동 기록 확인<span className="t-cap">경로·휴식·사진</span></button>
-      </div>
+      <div className="stack overlap">
+        <div className="qa" role="group" aria-label="여행지 기록">
+          <button className="tile" onClick={addPhotos}><span className="ic"><ImagePlus size={26} /></span>사진 추가<span className="t-cap">{photos.length}장</span></button>
+          <button className="tile" onClick={() => setPlaceSheet(true)}><span className="ic"><MapPinned size={26} /></span>장소 기록<span className="t-cap">{places.length}곳</span></button>
+          <button className="tile" onClick={() => { setMemo(trip.memo); setMemoSheet(true); }}><span className="ic"><NotebookPen size={26} /></span>메모<span className="t-cap">{trip.memo ? '작성됨' : '비어 있음'}</span></button>
+          <button className="tile" onClick={() => navigate('/explore')}><span className="ic"><Compass size={26} /></span>주변 탐색<span className="t-cap">동반 장소</span></button>
+        </div>
 
-      {photos.length > 0 && (
-        <section className="section">
-          <div className="section-head"><h2 className="h-md">이번 여행 사진</h2><button className="link" onClick={() => navigate(`/album/${trip.id}`)}>정리하기 <ChevronRight size={16} /></button></div>
-          <div className="photo-strip">{photos.slice(-8).map((p) => <img key={p.id} src={p.photoUri} alt={p.memo || '여행 사진'} />)}</div>
-        </section>
-      )}
-
-      {places.length > 0 && (
-        <section className="section">
-          <h2 className="h-md">기록한 장소</h2>
-          <div className="card mt-12" style={{ padding: '4px 18px' }}>
-            {places.map((p) => (
-              <div key={p.id} className="row-item">
-                <PlaceThumb category={p.category} size={40} radius={12} />
-                <div className="grow">
-                  <p style={{ fontWeight: 650 }} className="ellipsis">{p.placeName} {p.isSample && <span className="badge sample">샘플</span>}</p>
-                  <p className="t-cap">{CATEGORY_LABEL[p.category]} · {formatTime(p.visitedAt)}{p.memo ? ` · ${p.memo}` : ''}</p>
-                </div>
-              </div>
-            ))}
+        <section>
+          <SectionHeader title={`오늘의 사진 · ${photos.length}장`} action="앨범 정리" onAction={() => navigate(`/album/${trip.id}`)} />
+          <div className="photo-row">
+            {photos.slice(-3).map((ph) => <div key={ph.id}><img src={ph.photoUri} alt={ph.memo || '여행 사진'} /></div>)}
+            <button className="add" onClick={addPhotos} aria-label="사진 추가하기"><Plus size={22} />추가</button>
           </div>
         </section>
-      )}
 
-      {trip.memo && (
-        <section className="section">
-          <h2 className="h-md">여행 메모</h2>
-          <div className="card mt-12"><p className="t-body" style={{ whiteSpace: 'pre-line' }}>{trip.memo}</p></div>
+        <section>
+          <SectionHeader title="오늘의 기록" action="이동 기록" onAction={() => navigate(`/album/${trip.id}`)} />
+          <div className="card">
+            {events.length ? <Timeline items={events} /> : <p className="t-sub">사진·장소·메모를 남기면 이곳에 시간순으로 쌓여요.</p>}
+          </div>
         </section>
-      )}
 
-      <div className="section" style={{ display: 'grid', gap: 10 }}>
-        <button className="btn primary block xl" disabled={busy} onClick={startReturn}><Undo2 size={22} />돌아가는 길 기록 시작</button>
-        <div className="btn-row">
-          <button className="btn secondary" disabled={busy} onClick={startExtra}><Car size={18} />다른 장소로 이동</button>
-          <button className="btn ghost" disabled={busy} onClick={() => setFinishSheet(true)}><Flag size={18} />여행 마무리</button>
-        </div>
-        <p className="t-cap" style={{ textAlign: 'center' }}>
-          {trip.isDemo ? '데모: 돌아가는 길은 강릉 → 서울, 다른 장소 이동은 강릉 시내 짧은 가상 주행이에요.' : '이동을 시작하면 휴식 알림과 주행 기록이 다시 시작돼요.'} 복귀 기록 없이 편도로 마무리해도 돼요. 앱을 닫아도 여행지 활동 상태는 유지돼요.
-        </p>
+        <section className="card" style={{ display: 'grid', gap: 8 }}>
+          <div className="row between"><p style={{ fontWeight: 600, fontSize: 16 }}>여행 메모</p><button className="icon-btn" style={{ width: 36, height: 36 }} aria-label="메모 수정" onClick={() => { setMemo(trip.memo); setMemoSheet(true); }}><Pencil size={18} /></button></div>
+          <p className="t-body" style={{ color: trip.memo ? 'var(--text-2)' : 'var(--text-3)', whiteSpace: 'pre-line' }}>{trip.memo || '여행지에서 있었던 일을 적어 두면 여행 일기에 그대로 반영돼요.'}</p>
+        </section>
+
+        <section>
+          <SectionHeader title="주변 반려견 동반 장소" action="더보기" onAction={() => navigate('/explore')} />
+          <div className="list-card">
+            {nearby.length === 0 ? <p className="t-sub" style={{ padding: '12px 0' }}>주변 장소를 찾는 중이에요.</p> : nearby.map((pl) => {
+              const ok = !!(pl.policy.smallDog || pl.policy.largeDog);
+              return (
+                <PlaceRow key={pl.id} onClick={() => navigate('/explore')}
+                  thumb={<PlaceThumb category={pl.category} size={56} radius={14} />}
+                  title={pl.name} meta={`${CATEGORY_LABEL[pl.category]}${pl.distanceKm != null ? ` · ${formatKm(pl.distanceKm)}` : ''}${pl.isSample ? ' · 샘플 데이터' : ''}`}
+                  status={{ tone: ok ? 'ok' : 'check', label: ok ? '동반 가능' : '확인 필요' }} />
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="next-move">
+          <p style={{ fontWeight: 600, fontSize: 16 }}>여행을 이어갈까요?</p>
+          <button className="btn primary block xl" disabled={busy} onClick={startReturn}>돌아가는 길 기록 시작</button>
+          <div className="btn-row">
+            <button className="btn ghost" disabled={busy} onClick={startExtra}>다른 장소로 이동</button>
+            <button className="btn ghost" disabled={busy} onClick={() => setFinishSheet(true)}>여행 마무리</button>
+          </div>
+          <p className="t-cap" style={{ fontSize: 12 }}>
+            {trip.isDemo ? '데모: 돌아가는 길은 강릉 → 서울, 다른 장소 이동은 강릉 시내 짧은 가상 주행이에요. ' : ''}돌아가는 길 없이 마무리해도 기록은 그대로 남아요. 앱을 닫아도 여행지 활동 상태는 유지돼요.
+          </p>
+        </section>
       </div>
 
       <Sheet open={placeSheet} onClose={() => setPlaceSheet(false)} labelledBy="pl-title">
@@ -180,7 +210,6 @@ export default function Destination() {
           <button className="btn primary" disabled={busy} onClick={finish}>여행 완료</button>
         </div>
       </Sheet>
-      <div className="mt-16"><Hint tone="green">여행지 활동 중에는 주행 기록이 멈춰 있어요. 휴식 알림은 돌아가는 길 기록을 시작하면 다시 켜져요.</Hint></div>
     </div>
   );
 }

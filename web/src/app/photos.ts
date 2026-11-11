@@ -2,15 +2,18 @@
 import { repo } from '../data/db';
 import { newId, type TripPhoto } from '../domain/models';
 import { fileToDataUrl, pickImages } from './image';
+import { activityTime } from '../trip/activityTime';
 
 export async function addPhotosToTrip(tripId: string, onError: (msg: string) => void): Promise<TripPhoto[] | null> {
   const files = await pickImages(true);
   if (!files) return null; // 선택 취소: 아무것도 바꾸지 않음
   let order = await repo.nextPhotoOrder(tripId);
+  const base = await activityTime(tripId);
+  let i = 0;
   const added: TripPhoto[] = [];
   for (const f of files.slice(0, 30)) {
     try {
-      const p: TripPhoto = { id: newId(), tripId, photoUri: await fileToDataUrl(f), createdAt: Date.now(), order: order++, memo: '' };
+      const p: TripPhoto = { id: newId(), tripId, photoUri: await fileToDataUrl(f), createdAt: base + i++, order: order++, memo: '' };
       await repo.addPhoto(p);
       added.push(p);
     } catch (e) {

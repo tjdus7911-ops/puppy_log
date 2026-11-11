@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlaskConical } from 'lucide-react';
+import { ChevronRight, FlaskConical } from 'lucide-react';
 import { useStore } from '../app/store';
 import { repo } from '../data/db';
 import type { VisitedPlace } from '../domain/models';
 import { nearestRegion, type Region } from '../domain/regions';
 import { MapView } from '../ui/MapView';
-import { EmptyState, Segmented, TopBar } from '../ui/components';
+import { EmptyState, Segmented } from '../ui/components';
+import { PhotoFallback, SectionHeader, StatStrip } from '../ui/kit';
 import { PawGlyph } from '../ui/Art';
 import { navigate, queryParam, useRoute } from '../app/router';
-import { formatKm } from '../domain/format';
-import { TripCard } from './Album';
+import { formatKm, formatShortDate } from '../domain/format';
 
 /** 발도장 = 실제 여행의 도착 지역 + 실제(샘플 아님) 방문 장소의 지역 */
 export function aggregatePaws(trips: { id: string; endLocation: { latitude: number; longitude: number } | null }[], places: VisitedPlace[]) {
@@ -43,63 +43,69 @@ export default function PawMap() {
   const selected = paws.find((p) => p.region.id === sel) ?? null;
   const selTrips = selected ? ended.filter((t) => selected.tripIds.has(t.id)) : [];
 
+  const totalKm = ended.reduce((a, t) => a + t.totalDistanceKm, 0);
+  const kmText = totalKm >= 100 ? Math.round(totalKm).toLocaleString('ko-KR') : totalKm.toFixed(1).replace(/\.0$/, '');
+  const albumLink = (name: string) => `/album?region=${encodeURIComponent(name)}${source === 'demo' ? '&src=demo' : ''}`;
+
   return (
     <div className="screen">
-      <TopBar title="발도장 지도" />
-      {hasDemo && (
-        <div style={{ marginBottom: 12 }}>
-          <Segmented ariaLabel="기록 종류" value={source} onChange={(v) => { setSource(v); setSel(null); }} options={[{ value: 'real', label: '실제 기록' }, { value: 'demo', label: '데모 기록' }]} />
+      <header className="paw-head">
+        <h1 className="h-xl">발도장 지도</h1>
+        {hasDemo && <div style={{ width: 168 }}><Segmented ariaLabel="기록 종류" value={source} onChange={(v) => { setSource(v); setSel(null); }} options={[{ value: 'real', label: '실제 기록' }, { value: 'demo', label: '데모' }]} /></div>}
+      </header>
+      <div className="stack" style={{ gap: 20, marginTop: 12 }}>
+        {source === 'demo' && <div className="demo-ribbon" style={{ margin: 0, borderRadius: 12 }}><FlaskConical size={14} />데모 기록으로 만든 발도장이에요 · 실제 통계와 분리</div>}
+        <StatStrip items={[{ value: String(ended.length), unit: '회', label: '총 여행 횟수' }, { value: kmText, unit: 'km', label: '누적 이동 거리' }, { value: String(paws.length), unit: '곳', label: '방문 지역' }]} />
+        <div className="paw-map-card">
+          <span className="legend">발도장 크기 = 방문 횟수</span>
+          <MapView
+            fit="korea"
+            height={460}
+            markers={paws.map((p) => ({ id: p.region.id, point: p.region, kind: 'paw' as const, count: p.tripIds.size, active: p.region.id === sel, label: `${p.region.name} ${p.tripIds.size}회`, onClick: () => setSel(p.region.id === sel ? null : p.region.id) }))}
+            ariaLabel="발도장 지도"
+          />
         </div>
-      )}
-      {source === 'demo' && <div className="demo-ribbon" style={{ margin: '0 0 12px', borderRadius: 12 }}><FlaskConical size={14} />데모 기록으로 만든 발도장이에요</div>}
-      <MapView
-        fit="korea"
-        height={420}
-        markers={paws.map((p) => ({ id: p.region.id, point: p.region, kind: 'paw' as const, count: p.tripIds.size, active: p.region.id === sel, label: `${p.region.name} ${p.tripIds.size}회`, onClick: () => setSel(p.region.id === sel ? null : p.region.id) }))}
-        ariaLabel="발도장 지도"
-      />
-      <div className="card mt-16" style={{ padding: '16px 10px' }}>
-        <div className="grid-3">
-          <div><p className="k">총 여행 횟수</p><p className="v" style={{ fontSize: 22 }}>{ended.length}회</p></div>
-          <div><p className="k">누적 이동 거리</p><p className="v" style={{ fontSize: 22 }}>{formatKm(ended.reduce((a, t) => a + t.totalDistanceKm, 0))}</p></div>
-          <div><p className="k">방문 지역</p><p className="v" style={{ fontSize: 22 }}>{paws.length}곳</p></div>
-        </div>
-      </div>
-      {paws.length > 0 && (
-        <div className="region-cards mt-12">
-          {paws.slice(0, 6).map((p) => (
-            <button key={p.region.id} className="region-card" onClick={() => navigate(`/album?region=${encodeURIComponent(p.region.name)}${source === 'demo' ? '&src=demo' : ''}`)}>
-              <PawGlyph size={22} color="var(--primary)" />
-              <span>{p.region.name}</span><b>{p.tripIds.size}회</b>
-            </button>
-          ))}
-        </div>
-      )}
 
-      {paws.length === 0 ? (
-        <div className="card mt-16"><EmptyState title="아직 발도장이 없어요" desc="여행을 마치면 도착한 지역에 발도장이 찍혀요." /></div>
-      ) : (
-        <section className="section">
-          <div className="chips">
-            {paws.map((p) => (
-              <button key={p.region.id} className={`chip ${sel === p.region.id ? 'on' : ''}`} onClick={() => setSel(sel === p.region.id ? null : p.region.id)}>
-                {p.region.name} <b>{p.tripIds.size}</b>
-              </button>
-            ))}
-          </div>
-          {selected ? (
-            <div className="mt-16" style={{ display: 'grid', gap: 12 }}>
-              <div className="row between">
-                <p className="h-md">{selected.region.province} {selected.region.name}의 여행 {selTrips.length}개</p>
-                <button className="link" onClick={() => navigate(`/album?region=${encodeURIComponent(selected.region.name)}${source === 'demo' ? '&src=demo' : ''}`)}>앨범에서 보기 ›</button>
+        {paws.length === 0 ? (
+          <div className="card"><EmptyState title="아직 발도장이 없어요" desc="여행을 마치면 도착한 지역에 발도장이 찍혀요." /></div>
+        ) : (
+          <>
+            {selected && (
+              <section className="region-panel" aria-label={`${selected.region.name} 여행`}>
+                <div className="row between">
+                  <div><p className="h-md">{selected.region.province} {selected.region.name}</p><p className="t-cap">{selTrips.length}회 방문 · 사진 {selTrips.reduce((a, t) => a + (t.coverPhotoUri ? 1 : 0), 0) ? '있음' : '없음'} · 마지막 {formatShortDate(Math.max(...selTrips.map((t) => t.startTime)))}</p></div>
+                  <span className="row" style={{ gap: 4, color: 'var(--primary)', fontWeight: 700 }}><PawGlyph size={16} color="var(--primary)" />×{selected.tripIds.size}</span>
+                </div>
+                {selTrips.map((t) => (
+                  <button key={t.id} className="place-row" onClick={() => navigate(`/album/${t.id}`)}>
+                    <span className="pr-thumb" style={{ width: 64, height: 64 }}>{t.coverPhotoUri ? <img src={t.coverPhotoUri} alt="" /> : <PhotoFallback size={24} />}</span>
+                    <span className="pr-text"><span className="pr-title ellipsis">{t.title}</span><span className="pr-meta">{formatShortDate(t.startTime)} · {formatKm(t.totalDistanceKm)}</span></span>
+                    <ChevronRight size={18} color="var(--text-3)" />
+                  </button>
+                ))}
+                <button className="btn secondary block" onClick={() => navigate(albumLink(selected.region.name))}>{selected.region.name} 앨범에서 보기<ChevronRight size={16} /></button>
+              </section>
+            )}
+            <section>
+              <SectionHeader title="방문 지역" />
+              <div className="list-card region-list">
+                {paws.map((p) => {
+                  const ts = ended.filter((t) => p.tripIds.has(t.id));
+                  return (
+                    <button key={p.region.id} className="row-btn" aria-pressed={sel === p.region.id} onClick={() => setSel(sel === p.region.id ? null : p.region.id)}>
+                      <span className="icon-tile" style={{ borderRadius: 18, width: 36, height: 36 }}><PawGlyph size={18} color="var(--primary)" /></span>
+                      <span className="grow"><b style={{ fontWeight: 600 }}>{p.region.province} {p.region.name}</b><br /><span className="t-cap">{formatKm(ts.reduce((a, t) => a + t.totalDistanceKm, 0))}</span></span>
+                      <b style={{ color: 'var(--primary)', fontWeight: 600 }}>{p.tripIds.size}회</b>
+                      <ChevronRight size={18} color="var(--text-3)" />
+                    </button>
+                  );
+                })}
               </div>
-              {selTrips.map((t) => <TripCard key={t.id} trip={t} compact />)}
-            </div>
-          ) : (
-            <p className="t-cap mt-12">지도나 지역을 누르면 그 지역의 여행 기록을 볼 수 있어요. 발도장은 도착 지역과 방문 장소를 기준으로 찍혀요.</p>
-          )}
-        </section>
-      )}
+              <p className="t-cap mt-8" style={{ fontSize: 12 }}>완료된 여행만 표시해요. 발도장은 도착 지역과 방문 장소를 기준으로 찍혀요.{source === 'real' && hasDemo ? ' 데모 기록은 ‘데모’ 탭에서 따로 볼 수 있어요.' : ''}</p>
+            </section>
+          </>
+        )}
+      </div>
     </div>
   );
 }

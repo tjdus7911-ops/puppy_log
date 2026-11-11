@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, FlaskConical, MapPin, Play, X } from 'lucide-react';
+import { Check, ChevronRight, FlaskConical, MapPin, Plus, Route, ShieldCheck, X } from 'lucide-react';
 import { useStore } from '../app/store';
 import { navigate, queryParam, useRoute } from '../app/router';
-import { planRests } from '../domain/plan';
-import { formatDuration, formatKm } from '../domain/format';
+import { planRests, SAFETY_ITEMS } from '../domain/plan';
+import { formatDuration } from '../domain/format';
 import { openNavigation } from '../places/navigation';
 import { getPlaceProvider, sortByDistance } from '../places/providers';
 import type { Place } from '../places/PlaceSearchProvider';
@@ -13,10 +13,15 @@ import { TripController, type StartKind } from '../trip/TripController';
 import { DEMO_DESTINATION, DEMO_TOTAL_KM, pointAtKm } from '../vehicle/demoRoute';
 import { ASSUMED_AVG_KMH } from '../domain/plan';
 import { Hint, Sheet, Switch, TopBar } from '../ui/components';
-import { PetAvatar, Scene } from '../ui/Art';
+import { PetAvatar, PlaceThumb } from '../ui/Art';
+import { PlaceRow, Stat } from '../ui/kit';
+import { callName } from '../domain/tripText';
+import { SafetyCheck } from './SafetyCheck';
 import { RestIntervalPicker } from './PetForm';
 
 export const DEMO_SPEEDS = [1, 10, 30, 60, 120, 300];
+
+const formatHM = (min: number) => `${Math.floor(min / 60)}:${String(Math.round(min % 60)).padStart(2, '0')}`;
 
 export default function TripSetup() {
   const { pets, settings, updateSettings, toast } = useStore();
@@ -40,6 +45,7 @@ export default function TripSetup() {
   const [recordRoute, setRecordRoute] = useState(true);
   const [busy, setBusy] = useState(false);
   const [permSheet, setPermSheet] = useState<string | null>(null);
+  const [safetyOpen, setSafetyOpen] = useState(false);
 
   const suggestions = useMemo(() => {
     const q = destText.trim();
@@ -108,161 +114,178 @@ export default function TripSetup() {
 
   const kind: StartKind = settings.demoMode ? 'demo' : 'device-location';
 
+  const mainPet = pets.find((p) => p.id === selected[0]);
+  const step = (n: number, title: string, aside?: React.ReactNode) => (
+    <div className="step-h"><span className="step-n">{n}</span><h2 className="h-md">{title}</h2>{aside}</div>
+  );
+
   return (
-    <div className="screen no-nav">
-      <TopBar title="여행 시작" />
-      {fromNavi && <div className="hint" style={{ marginBottom: 8 }}><span className="badge sample" style={{ height: 20 }}>데모</span>차량 내비에 설정된 목적지를 불러왔어요(실제 차량에서는 Pleos NaviHelper 연동 예정).</div>}
-      {settings.demoMode && (
-        <div className="demo-ribbon"><FlaskConical size={14} /> 데모 모드 · 실제 차량·위치 대신 가상 주행 데이터를 사용해요</div>
-      )}
+    <div className="screen no-nav" style={{ paddingBottom: 0 }}>
+      <TopBar title="새 여행" right={settings.demoMode ? <span className="badge sample" style={{ marginRight: 8 }}><FlaskConical size={12} />데모 모드</span> : undefined} />
+      {fromNavi && <div className="hint" style={{ marginBottom: 12 }}><span className="badge sample" style={{ height: 20 }}>데모</span>차량 내비에 설정된 목적지를 불러왔어요(실제 차량에서는 Pleos NaviHelper 연동 예정).</div>}
 
-      <div className="setup-hero">
-        <div>
-          <p className="h-xl">여행 시작하기</p>
-          <p className="t-body mt-8" style={{ color: 'var(--text-2)' }}>{pets.find((p) => p.id === selected[0])?.name ?? '우리 강아지'}와<br />새로운 여행을 시작할까요?</p>
-        </div>
-        <div style={{ width: 170, flex: 'none' }}><Scene kind="drive" height={120} /></div>
-      </div>
-      <section className="section" style={{ marginTop: 18 }}>
-        <h2 className="h-md">함께 이동할 반려견</h2>
-        <div className="row mt-12" style={{ flexWrap: 'wrap', gap: 14 }}>
-          {pets.map((p) => {
-            const on = selected.includes(p.id);
-            return (
-              <button key={p.id} onClick={() => togglePet(p.id)} aria-pressed={on} style={{ border: 0, background: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, position: 'relative', padding: 0 }}>
-                <div style={{ borderRadius: '50%', boxShadow: on ? '0 0 0 3px var(--primary)' : '0 0 0 1px var(--line)', opacity: on ? 1 : 0.6 }}>
-                  <PetAvatar uri={p.photoUri} size={64} />
-                </div>
-                {on && <span style={{ position: 'absolute', top: 0, right: -2, width: 22, height: 22, borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'grid', placeItems: 'center' }}><Check size={14} strokeWidth={3} /></span>}
-                <span style={{ fontSize: 13.5, fontWeight: on ? 700 : 500 }}>{p.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="section">
-        <h2 className="h-md">목적지 <span className="t-cap" style={{ fontWeight: 500 }}>(선택)</span></h2>
-        <div style={{ position: 'relative' }} className="mt-12">
-          <MapPin size={18} style={{ position: 'absolute', left: 14, top: 17, color: 'var(--text-2)' }} />
-          <input
-            className="input"
-            style={{ paddingLeft: 40, paddingRight: 44 }}
-            placeholder="목적지 없이도 출발할 수 있어요"
-            value={destText}
-            onChange={(e) => { setDestText(e.target.value); setDest(null); }}
-            aria-label="목적지"
-          />
-          {destText && (
-            <button className="icon-btn" aria-label="목적지 지우기" style={{ position: 'absolute', right: 4, top: 4 }} onClick={() => { setDestText(''); setDest(null); }}>
-              <X size={18} />
-            </button>
-          )}
-        </div>
-        {suggestions.length > 0 && (
-          <div className="card mt-8" style={{ padding: '4px 16px' }}>
-            {suggestions.map((r) => (
-              <button key={r.id} className="row-btn" onClick={() => { setDestText(r.name); setDest(r); }}>
-                <MapPin size={16} color="var(--text-2)" />
-                <span className="grow">{r.name} <span className="t-cap">{r.province}</span></span>
-              </button>
-            ))}
+      <div className="stack" style={{ marginTop: 8 }}>
+        {/* 1. 목적지 */}
+        <section>
+          {step(1, '목적지', <span className="t-cap">선택</span>)}
+          <div className="dest-box" style={!destText ? { borderColor: 'var(--line)' } : undefined}>
+            <MapPin size={22} color="var(--primary)" />
+            <input className="input" placeholder="목적지 없이도 출발할 수 있어요" value={destText} onChange={(e) => { setDestText(e.target.value); setDest(null); }} aria-label="목적지" />
+            {destText && <button className="icon-btn" aria-label="목적지 지우기" onClick={() => { setDestText(''); setDest(null); }}><X size={18} /></button>}
           </div>
-        )}
-        {destText && !dest && suggestions.length === 0 && <p className="t-cap mt-8">목록에 없는 곳은 이름만 기록하고 위치는 여행 경로로 정리해요.</p>}
-      </section>
-
-      <section className="section">
-        <h2 className="h-md">휴식 알림 간격</h2>
-        <div className="mt-12"><RestIntervalPicker value={interval} onChange={setIntervalMin} /></div>
-        <p className="t-cap mt-8">실제 주행 시간이 이 간격에 이르면 알려드려요. 신호 대기·정체는 휴식으로 세지 않아요.</p>
-      </section>
-
-      <section className="section">
-        <h2 className="h-md">반려견 맞춤 휴식 계획</h2>
-        {!plan ? (
-          <p className="t-sub mt-8">{dest ? '출발 위치를 아직 알 수 없어 예상 시간은 출발 후 계산해요.' : '목적지를 고르면 예상 주행 시간과 휴식 횟수를 알려드려요.'}</p>
-        ) : (
-          <div className="card mt-12">
-            <div className="grid-3">
-              <div><p className="k">예상 주행</p><p className="v">{formatDuration(plan.drivingMinutes * 60)}</p></div>
-              <div><p className="k">휴식 간격</p><p className="v">{interval}분</p></div>
-              <div><p className="k">예상 휴식</p><p className="v">{plan.minRests === plan.maxRests ? `${plan.minRests}회` : `${plan.minRests}~${plan.maxRests}회`}</p></div>
+          {suggestions.length > 0 && (
+            <div className="list-card mt-8">
+              {suggestions.map((r) => (
+                <button key={r.id} className="row-btn" onClick={() => { setDestText(r.name); setDest(r); }}>
+                  <MapPin size={16} color="var(--text-2)" />
+                  <span className="grow">{r.name} <span className="t-cap">{r.province}</span></span>
+                </button>
+              ))}
             </div>
-            <p className="t-cap mt-12">{formatKm(DEMO_TOTAL_KM)} 경로 · 평균 {ASSUMED_AVG_KMH}km/h 가정 <b>(추정)</b> — 정체로 길어지면 휴식이 늘 수 있어요. 차량 내비 예상 시간 연동은 Android(NaviHelper)에서 진행 예정이에요.</p>
-            <label className="row mt-8" style={{ gap: 8, fontSize: 14 }}>
-              <Switch checked={settings.skipRestNearArrival} onChange={(v) => updateSettings({ skipRestNearArrival: v })} label="도착 직전 휴식 제외" />
-              도착 20분 전 이내의 휴식은 세지 않기
-            </label>
-            {restStops.length > 0 && (
-              <div className="mt-12">
-                <p style={{ fontWeight: 700, fontSize: 14 }}>경로 주변 휴식 장소 추천 <span className="badge sample" style={{ height: 20 }}>샘플 데이터</span></p>
-                {restStops.map((r) => (
-                  <div key={r.atMin} className="row-item" style={{ padding: '10px 0' }}>
-                    <span className="badge">{formatDuration(r.atMin * 60)} 후</span>
-                    <div className="grow">
-                      <p style={{ fontWeight: 650 }} className="ellipsis">{r.place?.name ?? '추천할 장소를 찾지 못했어요'}</p>
-                      <p className="t-cap">출발 후 약 {Math.round(r.atKm)}km 지점 · {r.place ? (r.place.policy.smallDog || r.place.policy.largeDog ? '동반 가능(샘플)' : '동반 여부 확인 필요') : ''}</p>
-                    </div>
-                  </div>
-                ))}
-                <p className="t-cap">출발 후 휴식 알림 때 이 장소를 다시 추천하고, 들를지 물어봐요. 경유지 추가는 직접 동의한 경우에만 요청해요.</p>
+          )}
+          {destText && !dest && suggestions.length === 0 && <p className="t-cap mt-8">목록에 없는 곳은 이름만 기록하고 위치는 여행 경로로 정리해요.</p>}
+        </section>
+
+        {/* 2. 반려견 */}
+        <section>
+          {step(2, '함께 이동할 반려견')}
+          <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
+            {pets.map((p) => {
+              const on = selected.includes(p.id);
+              return (
+                <button key={p.id} className={`pet-pick ${on ? 'on' : ''}`} onClick={() => togglePet(p.id)} aria-pressed={on}>
+                  <PetAvatar uri={p.photoUri} size={64} />
+                  <span style={{ fontWeight: 600 }}>{p.name}</span>
+                  <span className="t-cap" style={{ fontSize: 12 }}>{p.restIntervalMinutes}분 간격</span>
+                  {on && <span className="chk"><Check size={14} strokeWidth={3} /></span>}
+                </button>
+              );
+            })}
+            <button className="pet-pick" style={{ borderStyle: 'dashed', justifyContent: 'center' }} onClick={() => navigate('/pet/new')}>
+              <span className="icon-tile" style={{ width: 48, height: 48, borderRadius: 24 }}><Plus size={22} /></span>
+              <span className="t-cap">반려견 추가</span>
+            </button>
+          </div>
+        </section>
+
+        {/* 3. 예상 이동 시간 · 경로 */}
+        <section>
+          {step(3, '예상 이동 시간 · 경로', plan ? <span className="badge est">추정</span> : undefined)}
+          <div className="card" style={{ display: 'grid', gap: 16 }}>
+            <div className="route-pts">
+              <div className="route-rail"><i /><b /><i className="to" /></div>
+              <div style={{ display: 'grid', gap: 16 }}>
+                <div><p style={{ fontWeight: 600 }}>{settings.demoMode ? '서울 (데모 출발지)' : '현재 위치'}</p><p className="t-cap">출발</p></div>
+                <div><p style={{ fontWeight: 600 }}>{destText || '목적지 미정'}</p><p className="t-cap">도착</p></div>
               </div>
+            </div>
+            {plan ? (
+              <>
+                <div className="divider" style={{ margin: 0 }} />
+                <div className="row" style={{ gap: 28 }}>
+                  <Stat value={String(Math.round(DEMO_TOTAL_KM))} unit="km" label="이동 거리" />
+                  <Stat value={formatHM(plan.drivingMinutes)} label="예상 주행 시간" />
+                </div>
+                <p className="t-cap">데모 모드: 평균 {ASSUMED_AVG_KMH}km/h로 계산한 추정값이에요. 차량 내비가 연동되면 실제 예상 시간으로 바뀌어요(Android NaviHelper 예정).</p>
+              </>
+            ) : (
+              <p className="t-cap">{dest ? '출발 위치를 아직 알 수 없어 예상 시간은 출발 후 계산해요.' : '목적지를 고르면 예상 주행 시간과 휴식 횟수를 알려드려요.'}</p>
             )}
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div className="muted-box row" style={{ gap: 10, padding: '10px 12px' }}>
+                <Route size={18} color="var(--text-2)" /><span className="grow t-cap">경로 옵션은 차량 내비 설정을 따라요</span>
+              </div>
+              <div className="row between" style={{ gap: 8 }}>
+                <span className="t-cap">목적지를 내비게이션으로 보내기 <span style={{ color: 'var(--text-3)' }}>(웹: 카카오맵 링크)</span></span>
+                <button className="btn ghost sm" disabled={!dest} onClick={() => {
+                  if (!dest) return;
+                  const r = openNavigation(destText || '목적지', dest.latitude, dest.longitude, false);
+                  if (!r.ok) toast(r.message!, 'error');
+                }}>보내기</button>
+              </div>
+              <div className="row between"><span className="t-cap">내비 + 멍로드 분할 화면</span><span className="badge gray">미지원 · 차량 확인 필요</span></div>
+            </div>
           </div>
-        )}
-      </section>
+        </section>
 
-      <section className="section">
-        <h2 className="h-md">내비게이션 연동</h2>
-        <div className="card mt-12" style={{ display: 'grid', gap: 10 }}>
-          <div className="row between">
-            <span style={{ fontSize: 14.5 }}>목적지를 내비게이션으로 보내기</span>
-            <button className="btn ghost sm" disabled={!dest} onClick={() => {
-              if (!dest) return;
-              const r = openNavigation(destText || '목적지', dest.latitude, dest.longitude, false);
-              if (!r.ok) toast(r.message!, 'error');
-            }}>보내기</button>
-          </div>
-          <p className="t-cap">웹: 카카오맵 길찾기 링크 · 차량: Pleos NaviHelper 목적지 설정(연동 예정, 미검증)</p>
-          <div className="divider" style={{ margin: 0 }} />
-          <div className="row between"><span style={{ fontSize: 14.5 }}>경로 옵션</span><span className="badge gray">차량 내비 설정을 따름</span></div>
-          <p className="t-cap">멍로드는 자체 ‘편한 길’ 알고리즘이나 급커브·급제동 회피 경로를 제공하지 않아요. 내비 SDK가 지원하는 경로 옵션만 연동할 예정이에요.</p>
-          <div className="row between"><span style={{ fontSize: 14.5 }}>내비 + 멍로드 분할 화면</span><span className="badge gray">미지원 · 차량 확인 필요</span></div>
-        </div>
-      </section>
+        {/* 4. 휴식 계획 */}
+        <section>
+          {step(4, `${mainPet ? callName(mainPet.name) : '우리 강아지'} 맞춤 휴식 계획`)}
+          <RestIntervalPicker value={interval} onChange={setIntervalMin} />
+          <p className="t-cap mt-8">실제 주행 시간이 이 간격에 이르면 알려드려요. 신호 대기·정체는 휴식으로 세지 않아요.</p>
+          {plan && (
+            <div className="card mt-12" style={{ display: 'grid', gap: 18 }}>
+              <div className="row between" style={{ alignItems: 'flex-end' }}>
+                <div><p className="t-cap">예상 휴식</p><p className="big-num num">{plan.minRests === plan.maxRests ? plan.minRests : `${plan.minRests}~${plan.maxRests}`}<span style={{ fontSize: 16, fontWeight: 600, marginLeft: 4 }}>회</span></p></div>
+                <p className="t-cap">{interval}분마다 · {formatDuration(plan.drivingMinutes * 60)} 주행</p>
+              </div>
+              <div>
+                <div className="jbar big" role="img" aria-label="휴식 예정 지점">
+                  <span className="track" style={{ background: 'var(--primary)' }} />
+                  <span className="end start" /><span className="end goal" style={{ background: 'var(--primary)' }} />
+                  {plan.dueAtMinutes.map((m) => <span key={m} className="rest" style={{ left: `${(m / plan.drivingMinutes) * 100}%` }} />)}
+                </div>
+                <div className="jbar-labels"><span>출발</span>{plan.dueAtMinutes.slice(0, 1).map((m) => <span key={m} className="rest">휴식 1 · {formatHM(m)}</span>)}<span>도착 {formatHM(plan.drivingMinutes)}</span></div>
+              </div>
+              {restStops.length > 0 && (
+                <div>
+                  <p className="t-cap" style={{ marginBottom: 4 }}>추천 휴식 장소 · 휴식 예정 지점 근처</p>
+                  {restStops.map((r, i) => (
+                    <PlaceRow key={r.atMin}
+                      thumb={<PlaceThumb category={r.place?.category ?? 'restArea'} size={56} radius={14} />}
+                      title={r.place?.name ?? '추천할 장소를 찾지 못했어요'}
+                      meta={`휴식 ${i + 1} · 출발 후 약 ${Math.round(r.atKm)}km · ${r.place ? (r.place.policy.smallDog || r.place.policy.largeDog ? '동반 가능(샘플)' : '동반 확인 필요') : ''}`}
+                      status={r.place?.isSample !== false ? { tone: 'sample', label: '샘플' } : undefined} />
+                  ))}
+                  <p className="t-cap mt-8">출발 후 휴식 알림 때 이 장소를 다시 추천하고 들를지 물어봐요. 경유지는 직접 동의한 경우에만 요청해요.</p>
+                </div>
+              )}
+              <label className="row" style={{ gap: 12, fontSize: 14.5 }}>
+                <span className="grow">도착 20분 전 휴식은 건너뛰기</span>
+                <Switch checked={settings.skipRestNearArrival} onChange={(v) => updateSettings({ skipRestNearArrival: v })} label="도착 직전 휴식 제외" />
+              </label>
+            </div>
+          )}
+        </section>
 
-      <section className="section">
-        <div className="card">
+        {/* 기록 설정 */}
+        <section className="card" style={{ display: 'grid', gap: 14 }}>
           <div className="row">
             <div className="grow">
-              <p style={{ fontWeight: 700 }}>이동 경로 기록</p>
-              <p className="t-cap mt-8">허용한 위치 범위에서만 경로를 저장해요. 끄면 시간·거리만 기록해요.</p>
+              <p style={{ fontWeight: 600 }}>이동 경로 기록</p>
+              <p className="t-cap mt-8" style={{ marginTop: 2 }}>허용한 위치 범위에서만 경로를 저장해요. 끄면 시간·거리만 기록해요.</p>
             </div>
             <Switch checked={recordRoute} onChange={setRecordRoute} label="이동 경로 기록" />
           </div>
           {settings.demoMode && (
-            <>
-              <div className="divider" />
-              <p style={{ fontWeight: 700 }}>시뮬레이션 속도</p>
+            <div>
+              <p style={{ fontWeight: 600 }}>시뮬레이션 속도</p>
               <div className="chips mt-8">
-                {DEMO_SPEEDS.map((s) => (
-                  <button key={s} className={`chip ${settings.demoSpeed === s ? 'on' : ''}`} onClick={() => updateSettings({ demoSpeed: s })}>{s}배속</button>
+                {DEMO_SPEEDS.map((sp) => (
+                  <button key={sp} className={`chip ${settings.demoSpeed === sp ? 'on' : ''}`} onClick={() => updateSettings({ demoSpeed: sp })}>{sp}배속</button>
                 ))}
               </div>
-            </>
+            </div>
           )}
-        </div>
-      </section>
+        </section>
 
-      {!settings.demoMode && (
-        <div className="mt-16"><Hint tone="green">여행을 시작하면 위치 권한을 요청해요. 허용하지 않아도 수동 기록 모드로 여행을 기록할 수 있어요.</Hint></div>
-      )}
+        <button className="card row" style={{ gap: 12, textAlign: 'left', cursor: 'pointer', font: 'inherit' }} onClick={() => setSafetyOpen(true)}>
+          <span className="icon-tile rest"><ShieldCheck size={20} /></span>
+          <span className="grow"><b style={{ fontWeight: 600 }}>출발 전 안전 체크 {settings.safetyChecks.length}/{SAFETY_ITEMS.length}</b><br /><span className="t-cap">하네스 · 물 · 배변봉투 등 보호자 확인 목록</span></span>
+          <ChevronRight size={18} color="var(--text-3)" />
+        </button>
 
-      <button className="btn primary block xl mt-24" disabled={busy || selected.length === 0} onClick={() => start(kind)}>
-        <Play size={22} fill="#fff" /> {busy ? '준비 중…' : '여행 시작'}
-      </button>
+        {!settings.demoMode && <Hint tone="green">여행을 시작하면 위치 권한을 요청해요. 허용하지 않아도 수동 기록 모드로 여행을 기록할 수 있어요.</Hint>}
+      </div>
 
+      <div className="bottom-cta">
+        <button className="btn primary block xl" disabled={busy || selected.length === 0} onClick={() => start(kind)}>
+          {busy ? '준비 중…' : `${mainPet ? callName(mainPet.name) : '우리 강아지'}와 출발하기`}
+        </button>
+        <span className="t-cap" style={{ fontSize: 12 }}>출발하면 휴식 알림과 이동 기록이 시작돼요</span>
+      </div>
+
+      <Sheet open={safetyOpen} onClose={() => setSafetyOpen(false)} labelledBy="safety-title"><SafetyCheck /></Sheet>
       <Sheet open={!!permSheet} onClose={() => setPermSheet(null)} labelledBy="perm-title">
         <h2 id="perm-title" className="h-lg">위치 없이 기록할까요?</h2>
         <p className="t-sub mt-8">{permSheet}</p>

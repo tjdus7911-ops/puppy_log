@@ -1,6 +1,6 @@
 import { drivingLocked } from '../trip/driveLock';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, ArrowRight, Camera, Car, Check, ChevronRight, Clock3, Coffee, Download, FlaskConical, ImagePlus, Lock, MapPin, MessageSquare, Pencil, PenLine, Route, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Car, Check, ChevronLeft, ChevronRight, Coffee, Download, Flag, FlaskConical, House, ImagePlus, Lock, MapPin, MessageSquare, Navigation, Pencil, Route, Share2, Sparkles, Star, Trash2, Undo2, X } from 'lucide-react';
 import { useStore } from '../app/store';
 import { back, navigate, queryParam } from '../app/router';
 import { addPhotosToTrip } from '../app/photos';
@@ -14,8 +14,12 @@ import { petNames as joinPetNames } from '../domain/tripText';
 import { generateDiary } from '../diary/diaryGenerator';
 import { TripController } from '../trip/TripController';
 import { ErrorState, Hint, Loading, Sheet, TopBar } from '../ui/components';
-import { PlaceThumb, Scene } from '../ui/Art';
+import { PlaceThumb } from '../ui/Art';
+import { PhotoFallback, SectionHeader, Stat, Timeline, type TimelineItem } from '../ui/kit';
 import { MapView, type MapMarker } from '../ui/MapView';
+
+const formatKmPlain = (km: number) => (km >= 100 ? String(Math.round(km)) : km.toFixed(1).replace(/\.0$/, ''));
+const regionLabelOr = (p: { latitude: number; longitude: number } | null | undefined, fb: string) => (p ? regionLabel(p) : fb);
 
 interface Data {
   trip: Trip;
@@ -40,6 +44,7 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [manualKm, setManualKm] = useState('');
   const [photoMemo, setPhotoMemo] = useState<{ photo: TripPhoto; text: string } | null>(null);
+  const [heroI, setHeroI] = useState(0);
   const isNew = queryParam(route, 'new') === '1';
   const driving = drivingLocked(live);
 
@@ -163,68 +168,126 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
   rests.forEach((r) => r.latitude != null && r.longitude != null && markers.push({ id: r.id, point: { latitude: r.latitude, longitude: r.longitude }, kind: 'rest' }));
   places.forEach((p) => markers.push({ id: p.id, point: p, kind: 'place', label: p.placeName }));
 
+  const doneRests = rests.filter((r) => r.endTime);
+  const gallery = photos.length ? photos.map((p) => p.photoUri) : trip.coverPhotoUri ? [trip.coverPhotoUri] : [];
+  const heroIdx = Math.min(heroI, Math.max(0, gallery.length - 1));
+  // 경로·방문 타임라인: 주행 구간 · 휴식 · 방문 장소를 시간순으로
+  type Ev = TimelineItem & { at: number };
+  const evs: Ev[] = [];
+  legs.forEach((l) => {
+    const startTitle = l.kind === 'outbound' ? `${regionLabelOr(l.startLocation ?? trip.startLocation, '출발지')} 출발` : l.kind === 'return' ? '돌아오는 길 시작' : '여행지 내 이동 시작';
+    evs.push({ id: `${l.id}-s`, at: l.startTime, icon: l.kind === 'return' ? <Undo2 /> : <Navigation />, title: startTitle, time: formatTime(l.startTime) });
+    evs.push({ id: `${l.id}-l`, at: l.startTime + 1, kind: 'leg', icon: <Car />, title: `${LEG_LABEL[l.kind]} · ${formatKm(l.distanceKm)} · 주행 ${formatDuration(l.drivingDurationSeconds)}` });
+    if (l.endTime) evs.push({ id: `${l.id}-e`, at: l.endTime, icon: l.kind === 'return' ? <House /> : <Flag />, title: l.kind === 'outbound' ? `${trip.destinationName ?? regionLabelOr(l.endLocation, '목적지')} 도착` : l.kind === 'return' ? '집 도착 · 여행 완료' : '다음 장소 도착', time: formatTime(l.endTime) });
+  });
+  rests.forEach((r) => evs.push({ id: r.id, at: r.startTime, kind: 'rest', icon: <Coffee />, title: r.latitude != null && r.longitude != null ? `${regionLabel({ latitude: r.latitude, longitude: r.longitude })} 휴식` : '휴식', time: formatTime(r.startTime), sub: r.endTime ? `휴식 ${formatDuration((r.endTime - r.startTime) / 1000)}` : '휴식 중' }));
+  places.forEach((pl) => evs.push({ id: pl.id, at: pl.visitedAt, icon: <MapPin />, title: pl.placeName, time: formatTime(pl.visitedAt), sub: [pl.memo ? `“${pl.memo}”` : CATEGORY_LABEL[pl.category], pl.isSample ? '샘플' : null].filter(Boolean).join(' · ') }));
+  evs.sort((x, y) => x.at - y.at);
+
   return (
     <div className="screen no-nav">
-      <TopBar title="여행 상세" onBack={() => (isNew ? navigate('/album', { replace: true }) : back())} right={<button className="icon-btn" aria-label="공유 이미지 만들기" onClick={makeShare}><Share2 size={21} /></button>} />
-
-      {isNew && (
-        <div className="hint green" style={{ marginBottom: 14 }}>
-          <Check size={16} />
-          <div>여행을 완료했어요! 사진과 메모는 언제든 더 추가할 수 있고, 여행 일기도 다시 만들 수 있어요.</div>
+      <section className="photo-hero light" style={{ height: 380 }} aria-label="여행 사진">
+        {gallery.length ? <img src={gallery[heroIdx]} alt="여행 대표 사진" /> : <PhotoFallback size={72} />}
+        <div className="top">
+          <button className="glass-btn" aria-label="뒤로" onClick={() => (isNew ? navigate('/album', { replace: true }) : back())}><ChevronLeft size={22} /></button>
+          <button className="glass-btn" aria-label="공유 이미지 만들기" onClick={makeShare}><Share2 size={18} /></button>
         </div>
-      )}
-      {inProgress && (
-        <div className="hint" style={{ marginBottom: 14 }}>
-          <Route size={16} />
-          <div className="grow">진행 중인 여행이에요 · <b>{PHASE_LABEL[trip.phase]}</b>
-            {isLiveTrip && <button className="link" style={{ marginLeft: 8, color: 'var(--primary)' }} onClick={() => navigate(live.driving ? '/trip/live' : '/home')}>{live.driving ? '주행 화면으로' : '여행지 활동으로'} <ChevronRight size={14} /></button>}
-          </div>
-        </div>
-      )}
-
-      <div className="cover">
-        {trip.coverPhotoUri ? <img src={trip.coverPhotoUri} alt="여행 대표 사진" /> : <Scene kind="drive" height={260} />}
-        {trip.isDemo && <span className="badge sample" style={{ position: 'absolute', left: 12, top: 12 }}><FlaskConical size={12} />데모 기록 · 통계 제외</span>}
-      </div>
-
-      <div className="mt-16">
-        {editingTitle ? (
-          <div className="row" style={{ gap: 6 }}>
-            <input className="input" autoFocus maxLength={40} value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} aria-label="여행 제목" />
-            <button className="icon-btn" aria-label="취소" onClick={() => setEditingTitle(false)}><X size={20} /></button>
-            <button className="icon-btn" aria-label="제목 저장" style={{ background: 'var(--primary)', color: '#fff' }} onClick={async () => {
-              const t = titleDraft.trim();
-              if (!t) { toast('제목을 입력해 주세요.', 'error'); return; }
-              if (await save({ title: t, titleEdited: true })) setEditingTitle(false);
-            }}><Check size={20} /></button>
-          </div>
-        ) : (
-          <div className="row" style={{ alignItems: 'flex-start' }}>
-            <h1 className="h-xl grow">{trip.title}</h1>
-            <button className="icon-btn" aria-label="제목 수정" onClick={() => { setTitleDraft(trip.title); setEditingTitle(true); }}><Pencil size={18} /></button>
+        {gallery.length > 1 && (
+          <div className="row between" style={{ position: 'absolute', left: 20, right: 20, bottom: 20, zIndex: 2 }}>
+            <span className="dots">{gallery.slice(0, 8).map((_, i) => <i key={i} className={i === heroIdx ? 'on' : ''} onClick={() => setHeroI(i)} />)}</span>
+            <span className="count-pill num">{heroIdx + 1} / {gallery.length}</span>
           </div>
         )}
-        <p className="t-sub mt-8">{formatKoreanDate(trip.startTime)} · {formatTime(trip.startTime)} ~ {trip.endTime && !inProgress ? formatTime(trip.endTime) : '진행 중'}</p>
-        <p className="t-sub row" style={{ gap: 4 }}><MapPin size={14} />{regionLabel(trip.startLocation)} → {trip.endLocation ? regionLabel(trip.endLocation) : trip.destinationName ?? '알 수 없는 지역'}</p>
-        <p className="t-cap mt-8">함께한 친구: {names.join(', ') || '정보 없음'} · 기록 방식: {SOURCE_LABEL[trip.source]}</p>
-      </div>
+      </section>
 
-      {/* 시안: 정차 중 여행 기록 — 핵심 통계 + 여행 일기 보기 + 사진 추가 · 일기 편집 · 공유하기 */}
-      <div className="card mt-16" style={{ padding: '16px 18px' }}>
-        <div className="grid-3">
-          <div><Car size={20} color="var(--primary)" /><p className="v">{formatKm(trip.totalDistanceKm)}</p><p className="k">총 이동 거리</p></div>
-          <div><Clock3 size={20} color="var(--primary)" /><p className="v">{formatDuration(trip.drivingDurationSeconds)}</p><p className="k">주행 시간</p></div>
-          <div><Coffee size={20} color="var(--primary)" /><p className="v">휴식 {rests.filter((r) => r.endTime).length}회</p><p className="k">휴식 횟수</p></div>
+      <div className="stack" style={{ marginTop: 24 }}>
+        {(isNew || inProgress) && (
+          <div className={`hint ${isNew ? 'green' : ''}`}>
+            {isNew ? <Check size={16} /> : <Route size={16} />}
+            <div className="grow">{isNew ? '여행을 완료했어요! 사진과 메모는 언제든 더 추가할 수 있고, 여행 일기도 다시 만들 수 있어요.' : <>진행 중인 여행이에요 · <b>{PHASE_LABEL[trip.phase]}</b>
+              {isLiveTrip && <button className="link" style={{ marginLeft: 8, color: 'var(--primary)' }} onClick={() => navigate(live.driving ? '/trip/live' : '/home')}>{live.driving ? '주행 화면으로' : '여행지 활동으로'} <ChevronRight size={14} /></button>}</>}
+            </div>
+          </div>
+        )}
+
+        <section style={{ display: 'grid', gap: 8 }}>
+          <div className="row" style={{ gap: 6 }}>
+            <span className="badge">{inProgress ? '진행 중' : '여행 완료'}</span>
+            {doneRests.length > 0 && <span className="badge rest">휴식 {doneRests.length}회</span>}
+            {trip.isDemo && <span className="badge sample"><FlaskConical size={12} />데모 기록 · 통계 제외</span>}
+          </div>
+          {editingTitle ? (
+            <div className="row" style={{ gap: 6 }}>
+              <input className="input" autoFocus maxLength={40} value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} aria-label="여행 제목" />
+              <button className="icon-btn" aria-label="취소" onClick={() => setEditingTitle(false)}><X size={20} /></button>
+              <button className="icon-btn" aria-label="제목 저장" style={{ background: 'var(--primary)', color: '#fff' }} onClick={async () => {
+                const t = titleDraft.trim();
+                if (!t) { toast('제목을 입력해 주세요.', 'error'); return; }
+                if (await save({ title: t, titleEdited: true })) setEditingTitle(false);
+              }}><Check size={20} /></button>
+            </div>
+          ) : (
+            <div className="row" style={{ alignItems: 'flex-start' }}>
+              <h1 className="h-lg grow" style={{ fontSize: 22 }}>{trip.title}</h1>
+              <button className="icon-btn" style={{ width: 36, height: 36, color: 'var(--text-3)' }} aria-label="제목 수정" onClick={() => { setTitleDraft(trip.title); setEditingTitle(true); }}><Pencil size={18} /></button>
+            </div>
+          )}
+          <p className="t-cap num">{formatKoreanDate(trip.startTime)} {formatTime(trip.startTime)} – {trip.endTime && !inProgress ? formatTime(trip.endTime) : '진행 중'} · {regionShort(trip.startLocation)} ↔ {trip.endLocation ? regionShort(trip.endLocation) : trip.destinationName ?? '알 수 없는 지역'}</p>
+          <p className="t-cap">함께한 친구: {names.join(', ') || '정보 없음'} · 기록 방식: {SOURCE_LABEL[trip.source]}</p>
+        </section>
+
+        <section className="card stat-grid" aria-label="여행 통계">
+          <Stat value={formatKmPlain(trip.totalDistanceKm)} unit="km" label="총 이동 거리" />
+          <Stat value={formatDuration(trip.drivingDurationSeconds)} label={`주행 시간 · 전체 ${formatDuration(trip.elapsedDurationSeconds)}`} />
+          <Stat value={String(doneRests.length)} unit="회" label={`휴식 · 총 ${formatDuration(restTotal)}`} />
+          <Stat value={String(photos.length)} unit="장" label={`사진 · 장소 ${places.length}곳`} />
+        </section>
+
+        <section aria-label="앨범">
+          <SectionHeader title={`앨범 · ${photos.length}장`} action="정리하기" onAction={() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth' })} />
+          {photos.length === 0 ? (
+            <button className="card" style={{ width: '100%', textAlign: 'center', cursor: 'pointer', font: 'inherit' }} disabled={driving} onClick={addPhotos}><ImagePlus size={22} color="var(--primary)" /><p className="t-sub mt-8">사진을 추가하면 앨범이 만들어져요</p></button>
+          ) : (
+            <>
+              <div className="album-grid">
+                <img className="big" src={photos[0].photoUri} alt={photos[0].memo || '여행 사진 1'} />
+                <div className="col">{photos.slice(1, 3).map((p, i) => <img key={p.id} src={p.photoUri} alt={p.memo || `여행 사진 ${i + 2}`} />)}</div>
+              </div>
+              {photos.length > 3 && (
+                <div className="album-row">
+                  {photos.slice(3, 6).map((p, i) => (
+                    <div key={p.id}><img src={p.photoUri} alt={p.memo || `여행 사진 ${i + 4}`} />{i === 2 && photos.length > 6 && <span className="more">+{photos.length - 6}</span>}</div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        <section aria-label="이동 경로와 방문 장소">
+          <SectionHeader title="이동 경로 · 방문 장소" />
+          {route2.length > 1 ? (
+            <MapView route={route2} markers={markers} height={180} ariaLabel="이동 경로 지도" note="공유 카드에는 경로가 표시되지 않아요" />
+          ) : (
+            <div className="muted-box t-sub">{trip.source === 'manual' ? '수동 기록 모드라 이동 경로가 없어요.' : '저장된 이동 경로가 없어요.'}</div>
+          )}
+          {evs.length > 0 && <div className="card mt-12"><Timeline items={evs} /></div>}
+        </section>
+
+        <button className="diary-preview" onClick={() => navigate(`/album/${trip.id}/diary`)} aria-label="AI 일기 화면 열기">
+          <span className="row" style={{ gap: 8 }}><Sparkles size={20} color="var(--primary)" /><b className="grow" style={{ fontWeight: 600, fontSize: 16 }}>AI 여행 일기</b>{trip.diarySource !== 'none' && <span className="badge photo">{trip.diarySource === 'ai' ? 'AI 생성' : trip.diarySource === 'template' ? '초안' : '직접 작성'}</span>}</span>
+          <span className="t-body" style={{ color: 'var(--text-2)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{trip.diaryText || '이동 기록·방문 장소·사진·메모를 바탕으로 여행 일기를 만들어 드려요.'}</span>
+          <span className="row" style={{ gap: 2, color: 'var(--primary)', fontWeight: 600 }}>{trip.diaryText ? '일기 전체 보기' : '일기 만들기'}<ChevronRight size={18} /></span>
+        </button>
+
+        <div style={{ display: 'grid', gap: 8, textAlign: 'center' }}>
+          <button className="btn secondary block xl" onClick={makeShare}>SNS 공유 카드 만들기</button>
+          <span className="t-cap" style={{ fontSize: 12 }}>집 주소와 GPS 경로는 공유 카드에 포함되지 않아요</span>
         </div>
-        <button className="btn primary block mt-16" onClick={() => navigate(`/album/${trip.id}/diary`)}>여행 일기 보기 <ChevronRight size={18} /></button>
+        {driving && <p className="lock-note"><Lock size={15} />주행 중에는 상세 편집이 잠겨요. 정차 후 이용해 주세요.</p>}
       </div>
-      <div className="tile-row mt-12">
-        <button className="tile" disabled={driving} onClick={addPhotos}><Camera size={26} />사진 추가</button>
-        <button className="tile" disabled={driving} onClick={() => navigate(`/album/${trip.id}/diary`)}><PenLine size={26} />일기 편집</button>
-        <button className="tile" onClick={makeShare}><Share2 size={26} />공유하기</button>
-      </div>
-      {driving && <p className="lock-note mt-8"><Lock size={15} />주행 중에는 상세 편집이 잠겨요. 정차 후 이용해 주세요.</p>}
 
+      <h2 className="h-md" style={{ marginTop: 48, paddingTop: 24, borderTop: '8px solid var(--line)', marginLeft: -24, marginRight: -24, paddingLeft: 24 }}>기록 관리</h2>
       <section className="section">
         <h2 className="h-md row" style={{ gap: 6 }}><Car size={18} color="var(--primary)" />주행 기록</h2>
         {legs.length === 0 ? <p className="t-sub mt-8">저장된 주행 구간이 없어요.</p> : (
@@ -242,18 +305,6 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
         )}
       </section>
 
-      {route2.length > 1 ? (
-        <div className="mt-16"><MapView route={route2} markers={markers} height={240} ariaLabel="이동 경로 지도" /></div>
-      ) : (
-        <div className="muted-box mt-16 t-sub">{trip.source === 'manual' ? '수동 기록 모드라 이동 경로가 없어요.' : '저장된 이동 경로가 없어요.'}</div>
-      )}
-
-      <div className="grid-2 mt-16">
-        <div className="stat"><span className="k">이동 거리</span><p className="v">{formatKm(trip.totalDistanceKm)}</p></div>
-        <div className="stat"><span className="k">실제 주행 시간</span><p className="v">{formatDuration(trip.drivingDurationSeconds)}</p></div>
-        <div className="stat"><span className="k">총 여행 시간</span><p className="v">{formatDuration(trip.elapsedDurationSeconds)}</p></div>
-        <div className="stat"><span className="k">휴식</span><p className="v">{rests.filter((r) => r.endTime).length}회 · {formatDuration(restTotal)}</p></div>
-      </div>
       {trip.source === 'manual' && (
         <div className="card mt-12">
           <p style={{ fontWeight: 700 }}>이동 거리 직접 입력</p>
@@ -308,7 +359,7 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
       </section>
 
       <section className="section">
-        <div className="section-head"><h2 className="h-md">사진</h2><span className="t-cap">{photos.length}장</span></div>
+        <div className="section-head" id="photos"><h2 className="h-md">사진 정리</h2><span className="t-cap">{photos.length}장</span></div>
         <p className="t-cap" style={{ marginBottom: 8 }}>★ 대표 사진 · ◀ ▶ 순서 바꾸기 · 💬 사진 메모 — 여행을 마친 뒤에도 추가·삭제할 수 있어요.</p>
         <div className="photo-grid">
           {photos.map((p, i) => (

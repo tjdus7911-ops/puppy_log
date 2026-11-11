@@ -32,7 +32,7 @@ export default function App() {
 // 시안의 사이드 내비: 홈 · 이동 · 기록 · 커뮤니티 · 설정
 const TABS = [
   { key: 'home', label: '홈', icon: House, match: ['/home'] },
-  { key: 'move', label: '이동', icon: Navigation, match: ['/trip/live', '/trip/setup', '/explore'] },
+  { key: 'move', label: '여행', icon: Navigation, match: ['/trip/live', '/trip/setup', '/explore'] },
   { key: 'record', label: '기록', icon: BookOpen, match: ['/album', '/pawmap'] },
   { key: 'community', label: '커뮤니티', icon: Users, match: ['/community'] },
   { key: 'settings', label: '설정', icon: Settings, match: ['/my'] },
