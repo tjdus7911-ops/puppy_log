@@ -7,6 +7,7 @@
 //
 // Provider → 엔진 → 저장소 흐름은 v1 과 같고, 앱이 꺼져도 스냅샷으로 어느 단계든 복원합니다.
 // Android 쪽 TripViewModel 에 같은 상태 구조를 옮길 예정입니다(docs/TRIP_LIFECYCLE.md).
+import { arrivalPush, queueEvent } from './events';
 import { activityTime } from './activityTime';
 import { repo, type ActiveTripSnapshot } from '../data/db';
 import type { DriveLeg, GeoPoint, LegKind, Pet, PlaceCategory, RestSession, Trip, TripLocation, TripPhase } from '../domain/models';
@@ -191,6 +192,16 @@ export class TripControllerImpl {
       }),
     };
     await this.persist();
+    // 서버 도착 이벤트(아웃박스) — 같은 구간의 도착은 한 번만 쌓임. 데모는 실제 알림을 보내지 않도록 표시
+    if (leg) {
+      const isDemo = this.trip.isDemo;
+      void queueEvent({
+        id: `TRIP_ARRIVED:${this.trip.id}:${leg.id}`, type: 'TRIP_ARRIVED', tripId: this.trip.id, legId: leg.id,
+        destinationName: this.trip.destinationName, petNames: this.meta.petNames, tripStatus: 'AT_DESTINATION', occurredAt: leg.endTime ?? Date.now(), isDemo,
+        push: arrivalPush(callName(this.meta.petNames[0] ?? '우리 강아지'), this.trip.destinationName, this.trip.id),
+        delivery: isDemo ? 'skipped-demo' : 'pending', attempts: 0,
+      }).catch(() => {});
+    }
     if (this.meta.voice) speak(`${callName(this.meta.petNames[0] ?? '우리 강아지')}와 목적지에 도착했어요. 여행지에서의 순간도 기록해 보세요.`);
     this.emit(true);
     return true;
@@ -580,7 +591,7 @@ export class TripControllerImpl {
   }
 
   /** 데모 전용: 상태별 화면을 바로 확인하기 위한 이동(실제 주행에는 사용 불가). 기록은 데모로만 남아요. */
-  async demoJump(target: 'driving' | 'restDue' | 'resting' | 'arrived'): Promise<boolean> {
+  async demoJump(target: 'driving' | 'restSoon' | 'restDue' | 'resting' | 'arrived'): Promise<boolean> {
     if (!(this.provider instanceof DemoVehicleDataProvider) || !this.engine) return false;
     if (target === 'resting') {
       if (this.engine.status !== 'resting') await this.beginRest();
@@ -592,6 +603,7 @@ export class TripControllerImpl {
     const reset = { soonNotified: false, dueNotified: false, snoozeUntilSec: null };
     this.reminder = null;
     if (target === 'driving') this.engine = { ...this.engine, drivingSinceRestSec: Math.min(this.engine.drivingSinceRestSec, 20 * 60), reminder: reset };
+    if (target === 'restSoon') this.engine = { ...this.engine, drivingSinceRestSec: Math.max(0, intervalSec - 9 * 60), reminder: { ...reset, soonNotified: true } };
     if (target === 'restDue') this.engine = { ...this.engine, drivingSinceRestSec: intervalSec - 3, reminder: { ...reset, soonNotified: true } };
     if (target === 'arrived') {
       this.engine = { ...this.engine, lastFix: null, lastFixAt: null }; // 순간 이동 거리는 기록하지 않음

@@ -116,6 +116,9 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
         </div>
       </div>
 
+      <Field label="견종" optional>
+        <input className="input" maxLength={20} placeholder="예: 요크셔테리어 믹스" value={form.breed ?? ''} onChange={(e) => set('breed', e.target.value || null)} aria-label="견종" />
+      </Field>
       <Field label="몸무게 (kg)" optional error={weightError}>
         <input type="number" inputMode="decimal" step="0.1" className={`input ${weightError ? 'invalid' : ''}`} placeholder="예: 6.5" value={form.weight ?? ''} onChange={(e) => set('weight', e.target.value === '' ? null : Number(e.target.value))} />
       </Field>

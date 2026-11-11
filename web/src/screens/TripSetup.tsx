@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronRight, FlaskConical, MapPin, Plus, Route, ShieldCheck, X } from 'lucide-react';
+import { Car, Check, ChevronRight, Clock3, FlaskConical, MapPin, PawPrint, Plus, Route, Search, ShieldCheck, X } from 'lucide-react';
 import { useStore } from '../app/store';
 import { navigate, queryParam, useRoute } from '../app/router';
 import { planRests, SAFETY_ITEMS } from '../domain/plan';
@@ -10,7 +10,12 @@ import type { Place } from '../places/PlaceSearchProvider';
 import { REGIONS } from '../domain/regions';
 import type { GeoPoint } from '../domain/models';
 import { TripController, type StartKind } from '../trip/TripController';
-import { DEMO_DESTINATION, DEMO_TOTAL_KM, pointAtKm } from '../vehicle/demoRoute';
+import { DEMO_DESTINATION, DEMO_ROUTE, DEMO_TOTAL_KM, pointAtKm } from '../vehicle/demoRoute';
+import { useWide } from '../app/useWide';
+import { RoadMap } from '../ui/RoadMap';
+import { mapJsKey } from '../domain/models';
+import { TripScene, type SceneId } from '../ui/scenes';
+import { petLine } from './home/CarHome';
 import { ASSUMED_AVG_KMH } from '../domain/plan';
 import { Hint, Sheet, Switch, TopBar } from '../ui/components';
 import { PetAvatar, PlaceThumb } from '../ui/Art';
@@ -54,6 +59,10 @@ export default function TripSetup() {
   const [busy, setBusy] = useState(false);
   const [permSheet, setPermSheet] = useState<string | null>(null);
   const [safetyOpen, setSafetyOpen] = useState(false);
+  const wide = useWide();
+  const [carStep, setCarStep] = useState<1 | 2 | 3>(pets.length > 1 ? 1 : 2);
+  const [carQ, setCarQ] = useState('');
+  useEffect(() => { if (wide && pets.length === 0) navigate('/pet/new?first=1', { replace: true }); }, [wide, pets.length]);
 
   const suggestions = useMemo(() => {
     const q = destText.trim();
@@ -126,6 +135,119 @@ export default function TripSetup() {
   const step = (n: number, title: string, aside?: React.ReactNode) => (
     <div className="step-h"><span className="step-n">{n}</span><h2 className="h-md">{title}</h2>{aside}</div>
   );
+
+  // ═══ 차량 화면: 시안 1 하단의 3단계(반려견 선택 → 목적지 설정 → 여행 준비 확인) ═══
+  if (wide) {
+    const COASTAL = ['강릉', '속초', '양양', '동해', '삼척', '부산', '제주', '서귀포', '여수', '태안', '포항', '통영', '경포'];
+    const sceneOf = (name: string): SceneId => (COASTAL.some((c) => name.includes(c)) ? 'sea' : 'forest');
+    type Cand = { key: string; name: string; sub: string; point: GeoPoint; demo?: boolean };
+    const demoCand: Cand = { key: 'demo', name: DEMO_DESTINATION.name, sub: '강원 강릉시 · 데모 경로', point: DEMO_DESTINATION.point, demo: true };
+    const q = carQ.trim();
+    const regionCands: Cand[] = REGIONS.filter((r) => (q ? r.name.includes(q) || r.province.includes(q) : ['sokcho', 'yangpyeong', 'gapyeong', 'jeju'].includes(r.id))).slice(0, 6)
+      .map((r) => ({ key: r.id, name: r.name, sub: r.province, point: r as GeoPoint }));
+    const cands: Cand[] = [...(settings.demoMode && (!q || demoCand.name.includes(q) || '강릉'.includes(q)) ? [demoCand] : []), ...regionCands];
+    const picked = (c: Cand) => !!dest && Math.abs(dest.latitude - c.point.latitude) < 0.01 && Math.abs(dest.longitude - c.point.longitude) < 0.01;
+    const selPets = pets.filter((p) => selected.includes(p.id));
+    const planned = isDemoDest ? DEMO_ROUTE : [];
+    const mapMarkers = dest ? [{ id: 'dest', point: dest, kind: 'dest' as const, label: destText || '목적지' }] : [];
+    const head = (
+      <div className="cs-steps" aria-label="여행 준비 단계">
+        {(['반려견 선택', '목적지 설정', '여행 준비 확인'] as const).map((t, i) => (
+          <button key={t} className={`cs-step ${carStep === i + 1 ? 'on' : carStep > i + 1 ? 'done' : ''}`} onClick={() => (i + 1 < carStep) && setCarStep((i + 1) as 1 | 2 | 3)} disabled={i + 1 > carStep}>
+            <span className="n">{carStep > i + 1 ? <Check size={14} strokeWidth={3} /> : i + 1}</span>{t}
+          </button>
+        ))}
+        {settings.demoMode && <span className="badge sample" style={{ marginLeft: 'auto' }}><FlaskConical size={12} />데모 모드</span>}
+      </div>
+    );
+    return (
+      <div className="cs">
+        {head}
+        {carStep === 1 && (
+          <section className="cs-panel">
+            <h1 className="cs-title">이번 여행에 함께할 반려견을 선택해주세요</h1>
+            <p className="cs-sub">여러 마리를 함께 선택할 수 있어요 · 선택한 반려견만 이번 여행 기록에 연결돼요</p>
+            <div className="cs-pets">
+              {pets.map((p) => {
+                const on = selected.includes(p.id);
+                return (
+                  <button key={p.id} className={`cs-pet ${on ? 'on' : ''}`} onClick={() => togglePet(p.id)} aria-pressed={on}>
+                    <PetAvatar uri={p.photoUri} size={104} />
+                    <b>{p.name}</b><span>{petLine(p)}</span>
+                    {on && <span className="chk"><Check size={18} strokeWidth={3} /></span>}
+                  </button>
+                );
+              })}
+              <button className="cs-pet add" onClick={() => navigate('/pet/new')}><span className="plus"><Plus size={30} /></span><span>반려견 추가</span></button>
+            </div>
+            <div className="cs-foot"><button className="cs-next" disabled={selected.length === 0} onClick={() => setCarStep(2)}>다음 <ChevronRight size={22} /></button></div>
+          </section>
+        )}
+        {carStep === 2 && (
+          <section className="cs-panel cs-dest">
+            <div className="cs-col">
+              <h1 className="cs-title">어디로 여행할까요?</h1>
+              <div className="cs-search"><Search size={22} /><input value={carQ} onChange={(e) => setCarQ(e.target.value)} placeholder="목적지 검색 (지역)" aria-label="목적지 검색" />{carQ && <button className="icon-btn" aria-label="검색어 지우기" onClick={() => setCarQ('')}><X size={18} /></button>}</div>
+              <p className="cs-note">장소 검색 API는 서버 연동 전이라 지역 단위로 검색해요{settings.demoMode ? ' · 강릉 경포해변은 데모 경로' : ''}</p>
+              <div className="cs-list">
+                {cands.length === 0 ? <p className="t-sub">검색 결과가 없어요. 다른 지역 이름으로 찾아보세요.</p> : cands.map((c) => (
+                  <button key={c.key} className={`cs-item ${picked(c) ? 'on' : ''}`} onClick={() => { setDest(c.point); setDestText(c.name); }}>
+                    <span className="th"><TripScene id={sceneOf(c.name)} thumb /></span>
+                    <span className="grow"><b>{c.name}</b><small>{c.sub}</small></span>
+                    <span className={`radio ${picked(c) ? 'on' : ''}`}>{picked(c) && <Check size={16} strokeWidth={3} />}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="cs-map">
+              <RoadMap jsKey={mapJsKey(settings)} route={[]} plannedRoute={planned} markers={mapMarkers} height={460} ariaLabel="경로 미리보기" />
+              <div className="cs-map-cap">{dest ? (plan ? <><b>{Math.round(DEMO_TOTAL_KM)}km</b> · 약 {formatHM(plan.drivingMinutes)} <span className="badge est">추정</span></> : <>예상 거리·시간은 출발 후 계산해요 <span className="badge gray">경로 미리보기 없음</span></>) : '목적지를 선택하면 경로를 보여드려요'}</div>
+            </div>
+            <div className="cs-foot wide"><button className="cs-back" onClick={() => setCarStep(1)}>이전</button><button className="cs-next" disabled={!dest} onClick={() => setCarStep(3)}>경로 확인하기 <ChevronRight size={22} /></button></div>
+          </section>
+        )}
+        {carStep === 3 && (
+          <section className="cs-panel cs-confirm">
+            <h1 className="cs-title" style={{ textAlign: 'center' }}>여행 정보를 확인해주세요</h1>
+            <div className="cf-top">
+              <span className="cf-img"><TripScene id={sceneOf(destText)} /></span>
+              <div className="grow">
+                <p className="cf-name">{destText || '목적지 미정'} 여행</p>
+                <p className="cf-meta">{plan ? <><Car size={18} />약 {Math.round(DEMO_TOTAL_KM)} km<Clock3 size={18} style={{ marginLeft: 14 }} />약 {formatHM(plan.drivingMinutes)} <span className="badge est">추정</span></> : '출발 후 실제 경로로 거리·시간을 계산해요'}</p>
+                <div className="cf-pets">{selPets.map((p) => <span key={p.id}><PetAvatar uri={p.photoUri} size={34} />{p.name}</span>)}</div>
+              </div>
+            </div>
+            <div className="cf-rows">
+              <div className="cf-row">
+                <PawPrint size={22} color="var(--primary)" /><b>휴식 알림</b>
+                <div className="grow cf-iv">
+                  {[60, 90, 120].map((m) => <button key={m} className={`chip ${interval === m ? 'on' : ''}`} onClick={() => setIntervalMin(m)}>{m}분{m === 90 ? ' (기본)' : ''}</button>)}
+                  <span className="cf-custom"><button className="icon-btn" aria-label="5분 줄이기" onClick={() => setIntervalMin(Math.max(30, interval - 5))}>−</button><b className="num">{interval}분</b><button className="icon-btn" aria-label="5분 늘리기" onClick={() => setIntervalMin(Math.min(240, interval + 5))}>+</button></span>
+                </div>
+              </div>
+              <div className="cf-row">
+                <Route size={22} color="var(--primary)" /><b>경유지 추천</b>
+                <span className="grow t-cap">경로 근처 반려견 동반 장소를 지도 아래에 추천해요</span>
+                <Switch checked={settings.autoRecommend} onChange={(v) => updateSettings({ autoRecommend: v })} label="경유지 추천" />
+              </div>
+              <div className="cf-row">
+                <ShieldCheck size={22} color="var(--primary)" /><b>출발 전 안전 체크</b>
+                <span className="grow t-cap">{settings.safetyChecks.length}/{SAFETY_ITEMS.length} 확인</span>
+                <button className="btn ghost sm" onClick={() => setSafetyOpen(true)}>확인하기</button>
+              </div>
+            </div>
+            <div className="cs-foot wide"><button className="cs-back" onClick={() => setCarStep(2)}>이전</button><button className="cs-next" disabled={busy || selected.length === 0} onClick={() => start(kind)}>{busy ? '준비 중…' : '여행 시작하기'} <ChevronRight size={22} /></button></div>
+          </section>
+        )}
+        <Sheet open={safetyOpen} onClose={() => setSafetyOpen(false)} labelledBy="safety-title"><SafetyCheck /></Sheet>
+        <Sheet open={!!permSheet} onClose={() => setPermSheet(null)} labelledBy="perm-title">
+          <h2 id="perm-title" className="h-md">위치를 사용할 수 없어요</h2>
+          <p className="t-sub mt-8">{permSheet}</p>
+          <button className="btn primary block mt-16" onClick={() => { setPermSheet(null); void start('manual'); }}>수동 기록으로 시작</button>
+        </Sheet>
+      </div>
+    );
+  }
 
   return (
     <div className="screen no-nav" style={{ paddingBottom: 0 }}>

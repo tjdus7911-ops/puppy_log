@@ -364,6 +364,13 @@ export const repo = {
   async saveHomeBackground(v: unknown | null) {
     return guard(async () => { const db = await getDb(); if (v) await db.put('kv', v, 'homeBackground'); else await db.delete('kv', 'homeBackground'); });
   },
+  /** 서버 동기화 대기 이벤트(도착 알림 등) */
+  async getOutbox(): Promise<import('../trip/events').NotificationEvent[]> {
+    return guard(async () => ((await (await getDb()).get('kv', 'eventOutbox')) as import('../trip/events').NotificationEvent[] | undefined) ?? []);
+  },
+  async saveOutbox(v: import('../trip/events').NotificationEvent[]) {
+    return guard(async () => void (await (await getDb()).put('kv', v, 'eventOutbox')));
+  },
   async getInteractions(): Promise<Record<string, { liked?: boolean; saved?: boolean }>> {
     return guard(async () => ((await (await getDb()).get('kv', 'postInteractions')) as Record<string, { liked?: boolean; saved?: boolean }> | undefined) ?? {});
   },

@@ -6,6 +6,8 @@ export type PetSize = 'small' | 'medium' | 'large';
 export interface Pet {
   id: string;
   name: string;
+  /** 견종(선택). 이전 버전 데이터에는 없을 수 있음 */
+  breed?: string | null;
   photoUri: string | null; // 웹: 압축한 data URL, Android: content:// URI
   birthDate: string | null; // YYYY-MM-DD
   ageYears: number | null; // 생년월일을 모를 때 사용

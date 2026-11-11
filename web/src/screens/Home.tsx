@@ -23,6 +23,7 @@ import { PhotoFallback, PlaceRow, SectionHeader, StatStrip, TripPhotoCard } from
 import { PET_SIZE_LABEL as SIZE_LABEL } from '../domain/models';
 import { aggregatePaws } from './PawMap';
 import { PetHero } from './home/PetHero';
+import CarHome from './home/CarHome';
 import { BackgroundSheet, TripBackground } from './home/TripBackground';
 import { SafetyCheck } from './SafetyCheck';
 import TripLive from './TripLive';
@@ -39,6 +40,9 @@ const RECOMMENDED = [
 
 export default function Home() {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
+  const wide = useWide();
+  // 차량 화면: 홈은 항상 차량 메인 홈(진행 중인 여행은 카드로), 주행은 '/trip/live', 여행지 활동은 '/trip/destination'
+  if (wide) return <CarHome />;
   if (live.active && live.phase === 'at-destination') return <Destination />;
   if (live.active) return <TripLive />;
   return <IdleWrap />;

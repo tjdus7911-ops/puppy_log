@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Bluetooth, BookOpen, CloudSun, House, MapPin, Navigation, Settings, Signal, Users, Volume2, Wifi, WifiOff } from 'lucide-react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { BookOpen, Clock3, House, Navigation, PawPrint, Settings, UserRound, Users } from 'lucide-react';
 import { AppProvider, useStore } from './app/store';
 import { match, navigate, useRoute } from './app/router';
 import { useWide } from './app/useWide';
@@ -7,7 +7,6 @@ import { TripController } from './trip/TripController';
 import { storageMode } from './data/db';
 import { formatClock } from './domain/format';
 import { Loading, ErrorState } from './ui/components';
-import { PawGlyph } from './ui/Art';
 import Onboarding from './screens/Onboarding';
 import PetForm from './screens/PetForm';
 import Home from './screens/Home';
@@ -19,6 +18,8 @@ import TripDetail from './screens/TripDetail';
 import DiaryScreen from './screens/DiaryScreen';
 import PawMap from './screens/PawMap';
 import MyPage from './screens/MyPage';
+import PetsScreen from './screens/PetsScreen';
+import Destination from './screens/Destination';
 import Community from './screens/Community';
 import PostDetail from './screens/community/PostDetail';
 import PlaceView from './screens/community/PlaceView';
@@ -36,100 +37,33 @@ export default function App() {
   );
 }
 
-// 시안의 사이드 내비: 홈 · 이동 · 기록 · 커뮤니티 · 설정
+// 모바일 하단 탭: 홈 · 여행 · 기록 · 커뮤니티 · 내 정보
 const TABS = [
   { key: 'home', label: '홈', icon: House, match: ['/home'] },
   { key: 'move', label: '여행', icon: Navigation, match: ['/trip/live', '/trip/setup', '/explore'] },
   { key: 'record', label: '기록', icon: BookOpen, match: ['/album', '/pawmap'] },
   { key: 'community', label: '커뮤니티', icon: Users, match: ['/community'] },
+  { key: 'settings', label: '내 정보', icon: UserRound, match: ['/my', '/pets', '/pet'] },
+] as const;
+// 차량 왼쪽 메뉴(시안): 홈 · 여행/경로 · 내 반려견 · 여행 기록 · 설정 — 커뮤니티는 모바일 전용
+const CAR_TABS = [
+  { key: 'home', label: '홈', icon: House, match: ['/home'] },
+  { key: 'move', label: '여행', icon: Navigation, match: ['/trip/live', '/trip/setup', '/explore'] },
+  { key: 'pets', label: '내 반려견', icon: PawPrint, match: ['/pets', '/pet'] },
+  { key: 'record', label: '여행 기록', icon: Clock3, match: ['/album', '/pawmap', '/community'] },
   { key: 'settings', label: '설정', icon: Settings, match: ['/my'] },
 ] as const;
 
-function goTab(key: (typeof TABS)[number]['key']) {
+function goTab(key: (typeof TABS)[number]['key'] | (typeof CAR_TABS)[number]['key']) {
   if (key === 'home') navigate('/home');
+  else if (key === 'pets') navigate('/pets');
   else if (key === 'move') navigate(!TripController.isActive ? '/trip/setup' : TripController.phase === 'at-destination' ? '/home' : '/trip/live');
   else if (key === 'record') navigate('/album');
   else if (key === 'community') navigate('/community');
   else navigate('/my');
 }
 
-function useOnline() {
-  const [on, setOn] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
-  useEffect(() => {
-    const a = () => setOn(true);
-    const b = () => setOn(false);
-    window.addEventListener('online', a);
-    window.addEventListener('offline', b);
-    return () => { window.removeEventListener('online', a); window.removeEventListener('offline', b); };
-  }, []);
-  return on;
-}
 
-function useClock() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 15000);
-    return () => clearInterval(t);
-  }, []);
-  return now;
-}
-
-/** 주행 속도: 엔진의 누적 거리 ÷ (시뮬레이션) 시간 변화로 계산. 주행 중이 아니면 0 */
-function useSpeedKmh(live: ReturnType<typeof TripController.getSnapshot>) {
-  const [kmh, setKmh] = useState(0);
-  const prev = useRef<{ km: number; t: number } | null>(null);
-  const e = live.engine;
-  useEffect(() => {
-    if (!e || e.status !== 'driving') { prev.current = null; setKmh(0); return; }
-    const cur = { km: e.distanceKm, t: e.lastTick };
-    const p = prev.current;
-    if (!p || cur.t - p.t > 5 * 60_000) { prev.current = cur; return; }
-    if (cur.t - p.t < 2000) return;
-    const v = ((cur.km - p.km) / ((cur.t - p.t) / 3_600_000));
-    if (Number.isFinite(v) && v >= 0 && v < 200) setKmh((old) => Math.round(old ? old * 0.6 + v * 0.4 : v));
-    prev.current = cur;
-  }, [e?.distanceKm, e?.lastTick, e?.status]);
-  return kmh;
-}
-
-/**
- * 상단 상태 바(시안 구성): 시각 · 기어/주행 상태 · 속도 · 날씨 · 목적지 · 신호/5G/블루투스/음량.
- * 차량에서 받지 못하는 값(날씨·통신·블루투스·음량)은 ‘데모’ 표시와 함께 보여 주고 실제 값처럼 쓰지 않아요.
- */
-function StatusBar() {
-  const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
-  const online = useOnline();
-  const now = useClock();
-  const st = live.engine?.status;
-  const gear = !live.active ? 'P' : st === 'driving' ? 'D' : 'P';
-  const speed = useSpeedKmh(live);
-  const demo = live.kind === 'demo';
-  const dest = live.active ? (live.legKind === 'return' ? '집' : live.trip?.destinationName ?? null) : null;
-  return (
-    <header className="statusbar" role="banner">
-      <span className="num" style={{ fontWeight: 650, fontSize: 18 }}>
-        {now.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })}
-      </span>
-      <span className="sb-state">
-        <b>{gear}</b>
-        {live.active ? (st === 'driving' ? '주행 중' : st === 'resting' ? '휴식 중' : '정차') : '대기'}
-      </span>
-      {live.active && <span className="sb-speed num" aria-label={`속도 시속 ${speed}킬로미터`}><b>{speed}</b>km/h</span>}
-      <span className="sb-weather" title="날씨 정보는 연동 전이에요">
-        {demo ? <><CloudSun size={19} />맑음 12°<span className="badge sample" style={{ height: 18 }}>데모</span></> : <><CloudSun size={19} color="var(--text-3)" /><span style={{ color: 'var(--text-3)' }}>날씨 미연동</span></>}
-      </span>
-      <span className="sb-logo"><PawGlyph size={22} color="var(--primary)" />멍로드</span>
-      {dest && <span className="sb-dest ellipsis"><MapPin size={15} />{dest}</span>}
-      <span className="sb-icons" title="통신·블루투스·음량은 차량 연동 전 데모 표시예요">
-        <Signal size={18} /><span className="g5">5G</span><Bluetooth size={18} /><Volume2 size={18} />
-        <span className="badge sample" style={{ height: 18 }}>데모</span>
-      </span>
-      <span title={online ? '네트워크 연결됨' : '오프라인'} style={{ color: online ? 'var(--text)' : 'var(--error)', display: 'flex' }}>
-        {online ? <Wifi size={19} /> : <WifiOff size={19} />}
-      </span>
-    </header>
-  );
-}
 
 function Shell() {
   const { ready, fatal, settings, pets, toasts, toast, reload } = useStore();
@@ -185,16 +119,19 @@ function Shell() {
   else if (path === '/community/new/write') screen = <Compose />;
   else if (path === '/community/new/done') screen = <UploadDone />;
   else if (path === '/my') screen = <MyPage />;
+  else if (path === '/pets') screen = <PetsScreen />;
+  else if (path === '/trip/destination') screen = live.active && live.phase === 'at-destination' ? <Destination /> : <Home />;
   else screen = <Home />;
 
   const inFlow = path === '/onboarding' || path.startsWith('/pet/');
   const showNav = !inFlow;
   const activeTab = TABS.find((t) => t.match.some((m) => path === m || path.startsWith(`${m}/`)))?.key;
+  const carTab = CAR_TABS.find((t) => t.match.some((m) => path === m || path.startsWith(`${m}/`)))?.key;
   const fullBleed = path === '/trip/live' || (path === '/home' && live.active && live.driving) || path.startsWith('/community/');
 
   const onHomeLive = path === '/home' && live.active;
-  const pill = showNav && live.active && path !== '/trip/live' && !onHomeLive && (
-    <button className="live-pill" onClick={() => navigate(live.driving ? '/trip/live' : '/home')}>
+  const pill = showNav && live.active && path !== '/trip/live' && path !== '/trip/destination' && !(onHomeLive && !wide) && (
+    <button className="live-pill" onClick={() => navigate(live.driving ? '/trip/live' : wide && live.phase === 'at-destination' ? '/trip/destination' : '/home')}>
       <span className="live-dot" />
       {live.driving
         ? <>{live.legKind === 'return' ? '돌아가는 길 기록 중' : '여행 기록 중'} · <span className="num">{formatClock(live.engine?.elapsedSec ?? 0)}</span></>
@@ -213,13 +150,12 @@ function Shell() {
   if (wide && showNav) {
     return (
       <div className="shell">
-        <StatusBar />
         {storageWarn}
         <div className="shell-body">
           <nav className="rail" aria-label="메뉴">
-            {TABS.map((t) => (
-              <button key={t.key} className={activeTab === t.key ? 'on' : ''} aria-current={activeTab === t.key ? 'page' : undefined} onClick={() => goTab(t.key)}>
-                <t.icon size={26} strokeWidth={activeTab === t.key ? 2.3 : 1.8} />
+            {CAR_TABS.map((t) => (
+              <button key={t.key} className={carTab === t.key ? 'on' : ''} aria-current={carTab === t.key ? 'page' : undefined} onClick={() => goTab(t.key)}>
+                <t.icon size={26} strokeWidth={carTab === t.key ? 2.3 : 1.8} />
                 {t.label}
               </button>
             ))}
