@@ -40,9 +40,40 @@ export class StorageError extends Error {}
 
 let dbPromise: Promise<IDBPDatabase<MungRoadDB>> | null = null;
 
+/** persistent: 브라우저 IndexedDB(새로고침해도 유지) / memory: 저장소가 막힌 환경의 임시 메모리(새로고침하면 사라짐) */
+export let storageMode: 'persistent' | 'memory' = 'persistent';
+
+/** 샌드박스 등에서 IndexedDB 를 쓸 수 없으면 메모리 구현으로 바꿔 앱이 멈추지 않게 합니다. */
+async function useMemoryIndexedDb() {
+  const fake = await import('fake-indexeddb');
+  const g = globalThis as unknown as Record<string, unknown>;
+  for (const [k, v] of Object.entries({ indexedDB: fake.indexedDB, IDBKeyRange: fake.IDBKeyRange, IDBRequest: fake.IDBRequest, IDBTransaction: fake.IDBTransaction, IDBDatabase: fake.IDBDatabase, IDBObjectStore: fake.IDBObjectStore, IDBIndex: fake.IDBIndex, IDBCursor: fake.IDBCursor, IDBCursorWithValue: fake.IDBCursorWithValue, IDBOpenDBRequest: fake.IDBOpenDBRequest, IDBVersionChangeEvent: fake.IDBVersionChangeEvent })) {
+    try { Object.defineProperty(g, k, { value: v, configurable: true, writable: true }); } catch { /* noop */ }
+  }
+  storageMode = 'memory';
+}
+
 export function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<MungRoadDB>(DB_NAME, DB_VERSION, {
+    dbPromise = openWithFallback();
+  }
+  return dbPromise;
+}
+
+async function openWithFallback() {
+  try {
+    if (typeof indexedDB === 'undefined') throw new Error('no indexedDB');
+    // 일부 샌드박스에서는 open 이 응답 없이 멈추므로 시간 제한을 둡니다.
+    return await Promise.race([open(), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('indexedDB timeout')), 4000))]);
+  } catch {
+    await useMemoryIndexedDb();
+    return open();
+  }
+}
+
+function open() {
+  {
+    return openDB<MungRoadDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1) {
           db.createObjectStore('pets', { keyPath: 'id' });
@@ -63,7 +94,6 @@ export function getDb() {
       throw new StorageError(`저장소를 열 수 없어요: ${(e as Error).message}`);
     });
   }
-  return dbPromise;
 }
 
 async function guard<T>(fn: () => Promise<T>): Promise<T> {

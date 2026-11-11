@@ -65,7 +65,17 @@ export default function Home() {
       <button className="btn primary block xl mt-16" onClick={() => navigate('/trip/setup')} disabled={!pet}>
         <Play size={22} fill="#fff" /> 여행 시작하기
       </button>
-      {settings.demoMode && <p className="t-cap mt-8" style={{ textAlign: 'center' }}>데모 모드가 켜져 있어요 · 서울 → 강릉 시뮬레이션</p>}
+      {settings.demoMode && (
+        <div className="card mt-12" style={{ background: 'var(--secondary)', boxShadow: 'none' }}>
+          <p style={{ fontWeight: 700 }} className="row"><span className="badge sample">데모</span>서울 → 강릉 여행 체험 방법</p>
+          <ol className="t-sub" style={{ margin: '8px 0 0', paddingLeft: 20, lineHeight: 1.75 }}>
+            <li>‘여행 시작하기’ → 시뮬레이션 속도(60~300배속) 선택 → 여행 시작</li>
+            <li>주행 80분 예고·90분 휴식 알림 → 휴식 시작/종료 (도로 위험 정보는 데모 표시)</li>
+            <li>강릉 도착 후 ‘여행 종료’ → 여행 기록·AI 여행 일기·발도장 지도 확인</li>
+          </ol>
+          <p className="t-cap mt-8">PC에서는 창 너비 900px 이상이면 차량용 가로 레이아웃(사이드 메뉴)으로 바뀌어요. 데모 기록은 실제 통계에 포함되지 않아요.</p>
+        </div>
+      )}
 
       <div className="grid-4 mt-24">
         {shortcuts.map((s) => (

@@ -1,10 +1,12 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
 import { ChevronRight, FlaskConical, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 , Map as MapIcon } from 'lucide-react';
 import { realStats, useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { repo } from '../data/db';
 import { formatDuration, formatKm, ageFrom } from '../domain/format';
-import { PET_SIZE_LABEL } from '../domain/models';
+import { mapJsKey, PET_SIZE_LABEL } from '../domain/models';
+import { storageMode } from '../data/db';
+import { speechRecognitionSupported } from '../trip/voice';
 import { TripController } from '../trip/TripController';
 import { Hint, Sheet, Switch, TopBar } from '../ui/components';
 import { PetAvatar } from '../ui/Art';
@@ -86,6 +88,18 @@ export default function MyPage() {
           <div className="stat"><span className="k">다녀온 지역</span><p className="v">{regions}곳</p></div>
         </div>
         <p className="t-cap mt-8">실제 기록만 집계해요. 데모 시뮬레이션 기록은 포함되지 않아요.</p>
+      </section>
+
+      <section className="section">
+        <h2 className="h-md" style={{ marginBottom: 12 }}>기능별 연동 상태</h2>
+        <div className="card">
+          <div className="integ">
+            {integrations(settings.apiBaseUrl, mapJsKey(settings)).map(([k, st, cls]) => (
+              <Fragment key={k}><span>{k}</span><span className={`st ${cls}`}>{st}</span></Fragment>
+            ))}
+          </div>
+          <p className="t-cap mt-12">실제 동작 = 이 기기에서 실제로 동작 · 데모 = 가상 데이터(화면에 데모/샘플 배지) · 미연동 = 키·서버 설정 필요</p>
+        </div>
       </section>
 
       <section className="section">
@@ -195,4 +209,22 @@ export default function MyPage() {
       </Sheet>
     </div>
   );
+}
+
+type Integ = [string, string, 'ok' | 'demo' | 'off'];
+function integrations(api: string, jsKey: string): Integ[] {
+  const server = !!api.trim();
+  return [
+    ['여행 기록·휴식 알림·여행 종료', '실제 동작', 'ok'],
+    ['기록 저장(새로고침 유지)', storageMode === 'persistent' ? '실제 동작' : '임시 메모리', storageMode === 'persistent' ? 'ok' : 'off'],
+    ['서울 → 강릉 차량 주행', '데모', 'demo'],
+    ['차량 데이터(Pleos SDK)', '미연동 · Android 앱 전용', 'off'],
+    ['내비 목적지·남은 거리·ETA', '데모(추정) / 앱 목적지', 'demo'],
+    ['실제 도로 지도(카카오맵)', jsKey ? '키 설정됨 · 확인 필요' : '미연동 · 개요 지도', jsKey ? 'ok' : 'off'],
+    ['주변 반려견 동반 장소', server ? '서버 연동(카카오)' : '샘플 데이터', server ? 'ok' : 'demo'],
+    ['도로 위험 정보(사고·공사 등)', server ? '서버 연동(ITS) · 데모 여행은 데모' : '데모 여행에서만 데모', server ? 'ok' : 'demo'],
+    ['AI 여행 일기', server ? '서버 연동(AI)' : '기록 기반 템플릿', server ? 'ok' : 'demo'],
+    ['음성 명령', speechRecognitionSupported() ? '브라우저 인식 + 데모 명령' : '데모 명령', speechRecognitionSupported() ? 'ok' : 'demo'],
+    ['커뮤니티', '예시 게시물(준비 중)', 'demo'],
+  ];
 }

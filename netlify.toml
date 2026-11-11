@@ -1,0 +1,8 @@
+# Netlify: 저장소 연결 시 이 설정으로 web/ 을 빌드합니다. (환경변수·API 키 불필요 — 데모 모드로 동작)
+[build]
+  base = "web"
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"

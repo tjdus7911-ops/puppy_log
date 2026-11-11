@@ -4,6 +4,7 @@ import { AppProvider, useStore } from './app/store';
 import { match, navigate, useRoute } from './app/router';
 import { useWide } from './app/useWide';
 import { TripController } from './trip/TripController';
+import { storageMode } from './data/db';
 import { formatClock } from './domain/format';
 import { Loading, ErrorState } from './ui/components';
 import { PawGlyph } from './ui/Art';
@@ -153,6 +154,9 @@ function Shell() {
       여행 기록 중 · <span className="num">{formatClock(live.engine?.elapsedSec ?? 0)}</span>
     </button>
   );
+  const storageWarn = storageMode === 'memory' && (
+    <div className="storage-warn" role="status">이 환경에서는 브라우저 저장소를 쓸 수 없어 임시 메모리에 기록해요. 화면 이동은 괜찮지만 새로고침하면 기록이 사라져요.</div>
+  );
   const toastsEl = (
     <div className="toast-wrap" aria-live="polite">
       {toasts.map((t) => <div key={t.id} className={`toast ${t.tone === 'error' ? 'error' : ''}`}>{t.text}</div>)}
@@ -163,6 +167,7 @@ function Shell() {
     return (
       <div className="shell">
         <StatusBar />
+        {storageWarn}
         <div className="shell-body">
           <nav className="rail" aria-label="메뉴">
             {TABS.map((t) => (
@@ -182,6 +187,7 @@ function Shell() {
 
   return (
     <div className="app-frame">
+      {storageWarn}
       {screen}
       {pill}
       {['/home', '/explore', '/album', '/pawmap', '/community', '/my'].includes(path) && (

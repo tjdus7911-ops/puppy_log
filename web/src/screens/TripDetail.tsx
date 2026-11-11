@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Camera, Car, Check, ChevronRight, Clock3, Coffee, Download, FlaskConical, ImagePlus, Lock, MapPin, Pencil, PenLine, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useStore } from '../app/store';
-import { navigate, queryParam } from '../app/router';
+import { back, navigate, queryParam } from '../app/router';
 import { fileToDataUrl, pickImages } from '../app/image';
 import { renderShareCard } from '../app/shareCard';
 import { repo } from '../data/db';
@@ -169,7 +169,7 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
 
   return (
     <div className="screen no-nav">
-      <TopBar title="여행 상세" onBack={() => (isNew ? navigate('/album', { replace: true }) : history.back())} right={<button className="icon-btn" aria-label="공유 이미지 만들기" onClick={makeShare}><Share2 size={21} /></button>} />
+      <TopBar title="여행 상세" onBack={() => (isNew ? navigate('/album', { replace: true }) : back())} right={<button className="icon-btn" aria-label="공유 이미지 만들기" onClick={makeShare}><Share2 size={21} /></button>} />
 
       {isNew && (
         <div className="hint green" style={{ marginBottom: 14 }}>
@@ -356,6 +356,7 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
         <p className="t-cap mt-8">정확한 주소와 상세 GPS 경로는 넣지 않았어요.</p>
         {share && <img src={share.url} alt="공유 이미지 미리보기" className="mt-16" style={{ borderRadius: 16, boxShadow: 'var(--shadow)' }} />}
         <button className="btn primary block mt-16" onClick={doShare}><Download size={18} />저장 / 공유하기</button>
+        <p className="t-cap mt-8" style={{ textAlign: 'center' }}>저장이 되지 않는 환경(미리보기 페이지 등)에서는 이미지를 길게 누르거나 우클릭해 저장해 주세요.</p>
       </Sheet>
 
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} center labelledBy="tdel">

@@ -133,7 +133,15 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
         </div>
       </div>
 
-      <button className="btn primary block mt-24" disabled={busy} onClick={submit}>
+      {isFirst && (
+        <button className="btn secondary block mt-24" disabled={busy} onClick={async () => {
+          setBusy(true);
+          const ok = await savePet({ ...form, name: '사슴', size: 'medium', weight: 7.2, notes: '샘플 프로필(체험용)', restIntervalMinutes: 90 });
+          setBusy(false);
+          if (ok) { toast('샘플 반려견 ‘사슴’으로 시작해요. 마이페이지에서 언제든 수정할 수 있어요.'); navigate('/home', { replace: true }); }
+        }}>샘플 반려견 ‘사슴’으로 바로 체험하기</button>
+      )}
+      <button className={`btn primary block ${isFirst ? 'mt-12' : 'mt-24'}`} disabled={busy} onClick={submit}>
         {busy ? '저장 중…' : existing ? '저장하기' : '등록하기'}
       </button>
       {existing && (

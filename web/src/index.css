@@ -1,4 +1,4 @@
-@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+@import 'pretendard/dist/web/variable/pretendardvariable.css';
 
 :root {
   /* UI 시안 컬러 시스템: 화이트 · 파스텔 블루 */
@@ -308,3 +308,10 @@ textarea.input { height: auto; min-height: 96px; padding: 14px 16px; line-height
 .setup-hero { display: flex; align-items: center; gap: 12px; margin-top: 8px; padding: 20px; border-radius: 26px;
   background: linear-gradient(135deg, rgba(232, 241, 255, 0.95), rgba(221, 246, 237, 0.7)); box-shadow: var(--shadow); overflow: hidden; }
 .dash-map .map-note { top: 86px; left: 14px; bottom: auto; background: rgba(255,255,255,.92); border-radius: 999px; padding: 4px 10px; font-size: 11.5px; color: var(--text-2); z-index: 4; }
+
+.storage-warn { background: var(--error-soft); color: #9C2F2C; font-size: 13px; font-weight: 600; text-align: center; padding: 8px 16px; }
+.integ { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; font-size: 14px; align-items: center; }
+.integ .st { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.integ .ok { background: #E3F6EE; color: #1F7A5A; }
+.integ .demo { background: var(--accent-soft); color: #9A6411; }
+.integ .off { background: #EEF1F6; color: var(--text-2); }
