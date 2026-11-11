@@ -1,0 +1,11 @@
+node_modules/
+dist/
+web/e2e/screenshots/
+*.log
+.DS_Store
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.idea/
