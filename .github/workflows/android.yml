@@ -12,11 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
       - name: Build & unit test
         run: |
           chmod +x gradlew
+          echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
           ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest -Pmungroad.usePleosSdk=false -Pmungroad.useKakaoMap=false
       - uses: actions/upload-artifact@v4
         if: always()
