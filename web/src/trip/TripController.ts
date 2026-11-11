@@ -421,6 +421,7 @@ export class TripControllerImpl {
     if (provider instanceof DemoVehicleDataProvider) {
       provider.onArrive = () => {
         this.arrived = true;
+        this.reminder = null; // 도착 후에는 휴식 알림 중지
         if (this.meta.voice) speak(this.leg?.kind === 'return' ? '집 근처에 도착했어요. 여행을 완료하려면 여행 완료를 눌러 주세요.' : '목적지 근처에 도착했어요. 도착을 누르면 여행지 활동을 기록할 수 있어요.');
         this.emit(true);
       };
@@ -514,6 +515,8 @@ export class TripControllerImpl {
       if (this.meta.recordRoute) {
         this.pendingLocs.push({ id: newId(), tripId: this.trip.id, legId: this.leg.id, ...p, timestamp: ev.timestamp, accuracy: ev.accuracy });
       }
+    } else if ((ev.type === 'restSoon' || ev.type === 'restDue') && this.arrived) {
+      // 목적지(또는 집) 근처 도착 후에는 휴식 알림을 보내지 않음
     } else if (ev.type === 'restSoon') {
       this.reminder = { kind: 'soon', drivenMinutes: Math.floor((this.engine?.drivingSinceRestSec ?? 0) / 60), minutesLeft: ev.minutesLeft };
       if (this.meta.voice) speak(`${pet}와 곧 쉬어갈 시간이에요.`);
@@ -574,6 +577,30 @@ export class TripControllerImpl {
     await this.persist();
     this.emit(true);
     return durationSec;
+  }
+
+  /** 데모 전용: 상태별 화면을 바로 확인하기 위한 이동(실제 주행에는 사용 불가). 기록은 데모로만 남아요. */
+  async demoJump(target: 'driving' | 'restDue' | 'resting' | 'arrived'): Promise<boolean> {
+    if (!(this.provider instanceof DemoVehicleDataProvider) || !this.engine) return false;
+    if (target === 'resting') {
+      if (this.engine.status !== 'resting') await this.beginRest();
+      return true;
+    }
+    if (this.engine.status === 'resting') await this.finishRest();
+    if (!this.engine) return false;
+    const intervalSec = this.engine.restIntervalMin * 60;
+    const reset = { soonNotified: false, dueNotified: false, snoozeUntilSec: null };
+    this.reminder = null;
+    if (target === 'driving') this.engine = { ...this.engine, drivingSinceRestSec: Math.min(this.engine.drivingSinceRestSec, 20 * 60), reminder: reset };
+    if (target === 'restDue') this.engine = { ...this.engine, drivingSinceRestSec: intervalSec - 3, reminder: { ...reset, soonNotified: true } };
+    if (target === 'arrived') {
+      this.engine = { ...this.engine, lastFix: null, lastFixAt: null }; // 순간 이동 거리는 기록하지 않음
+      this.route = []; // 화면의 지나온 선이 목적지까지 직선으로 이어지지 않도록
+      this.provider.jumpNearEnd();
+    }
+    this.emit(true);
+    void this.persist();
+    return true;
   }
 
   /** 이번 여행의 휴식 알림 간격 변경(반려견 프로필 기본값은 그대로) */

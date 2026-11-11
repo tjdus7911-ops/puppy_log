@@ -63,7 +63,7 @@ export function BackgroundSheet({ open, onClose }: { open: boolean; onClose: () 
         <div className="bg-grid mt-16">
           {(Object.keys(SCENE_LABEL) as SceneId[]).map((id) => (
             <button key={id} className={`bg-opt ${bg.kind === 'preset' && bg.id === id ? 'on' : ''}`} onClick={() => pick(id)} aria-pressed={bg.kind === 'preset' && bg.id === id}>
-              <span className="th"><TripScene id={id} /></span>{SCENE_LABEL[id]}{id === 'sea' ? ' (기본)' : ''}
+              <span className="th"><TripScene id={id} thumb /></span>{SCENE_LABEL[id]}{id === 'sea' ? ' (기본)' : ''}
             </button>
           ))}
           <button className={`bg-opt ${bg.kind === 'upload' ? 'on' : ''}`} onClick={() => file.current?.click()} disabled={busy}>

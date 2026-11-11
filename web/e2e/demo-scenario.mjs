@@ -94,39 +94,35 @@ try {
     await shot('03-live-driving');
   });
 
-  await step('주행 중 휴식 예고 알림(80분)', async () => {
-    await page.getByRole('heading', { name: /곧 쉬어갈 시간이에요/ }).waitFor({ timeout: 60000 });
+  await step('휴식 10분 전: 팝업 없이 휴식 카드·추천 강조', async () => {
+    await page.locator('.rest-line.soon').waitFor({ timeout: 60000 });
     await shot('04-reminder-soon');
-    await btn('확인').click();
+    if (await page.locator('.overlay').count()) throw new Error('팝업이 떠 있음');
+    return (await page.locator('.rest-line .t').innerText()) + ` · 강조 카드 ${await page.locator('.rr-card.hl').count()}개`;
   });
 
-  await step('휴식 알림(90분) → 휴식 시작/종료', async () => {
-    await page.getByRole('heading', { name: /잠깐 쉬어갈까요/ }).waitFor({ timeout: 60000 });
+  await step('휴식 시점(90분) → 휴식 시작/종료(상태별 버튼)', async () => {
+    await page.locator('.rest-line.due').waitFor({ timeout: 60000 });
     await shot('05-reminder-due');
-    await page.keyboard.press('Escape');
-    await page.locator('.action', { hasText: '휴식 시작' }).click();
-    await page.locator('.tile3 .k', { hasText: '휴식 시간' }).waitFor();
+    const t = await page.locator('.rest-line .t').innerText();
+    if (await page.locator('.overlay').count()) throw new Error('팝업이 떠 있음');
+    await page.locator('.ca', { hasText: '휴식 시작' }).click();
+    await page.locator('.rest-line.resting').waitFor();
     await page.waitForTimeout(1500);
-    await page.locator('.action', { hasText: '휴식 종료' }).click();
+    await page.locator('.ca', { hasText: '휴식 종료' }).click();
     await page.waitForTimeout(400);
+    return `“${t}” → 휴식 중 → 종료`;
   });
 
-  await step('주행 중 자동 장소 추천 카드(샘플 데이터)', async () => {
-    // 휴식·식사 시간 트리거로 뜨거나, 음성 요청 칩으로 띄웁니다.
-    const pop = page.locator('.reco-pop');
-    if (!(await pop.isVisible())) {
-      const chip = page.locator('.chips .chip', { hasText: /근처|추천|카페|쉴 곳/ }).first();
-      if (await chip.count()) await chip.click();
-    }
-    try {
-      await pop.waitFor({ timeout: 30000 });
-    } catch {
-      return '경로 앞쪽 3km 이내 샘플 후보 없음 → 카드 미표시(정상 동작: 억지 추천 안 함)';
-    }
-    const s = (await pop.innerText()).replace(/\s+/g, ' ').slice(0, 80);
+  await step('다음 휴식지 추천 카드(팝업 없음) · 경유지 추가', async () => {
+    await page.locator('.rr-card').first().waitFor({ timeout: 30000 });
+    if (await page.locator('.reco-pop').count()) throw new Error('추천 팝업이 떠 있음');
+    const n = await page.locator('.rr-list .rr-card').count();
+    const first = (await page.locator('.rr-card').first().innerText()).replace(/\s+/g, ' ').slice(0, 60);
+    await page.locator('.rr-card .rr-go').first().click();
+    await page.locator('.rr-card.on').waitFor();
     await shot('06-auto-reco');
-    await pop.getByRole('button', { name: '괜찮아요' }).click();
-    return s;
+    return `카드 ${n}개 · ${first} · 경유지 표시`;
   });
 
   await step('도로 위험 정보(데모 표시)', async () => {
@@ -139,10 +135,9 @@ try {
   });
 
   await step('강릉 목적지 도착 → 여행지 활동(여행 계속)', async () => {
-    await page.getByText('목적지 근처에 도착했어요').first().waitFor({ timeout: 120000 });
-    await page.locator('.action', { hasText: '목적지 도착' }).click();
-    await page.getByRole('heading', { name: '목적지에 도착했나요?' }).waitFor();
-    await btn('목적지 도착 · 여행지 활동 시작').click();
+    await page.locator('.drive-head .t', { hasText: '근처에 도착했어요' }).waitFor({ timeout: 120000 });
+    if (await page.locator('.rest-line').count() || await page.locator('.rr-card').count()) throw new Error('도착 후에도 휴식 알림/추천이 보임');
+    await page.locator('.ca', { hasText: '여행지 활동 시작' }).click();
     await page.locator('.dest-hero').waitFor({ timeout: 15000 });
     const title = await page.locator('.dest-hero h1').innerText();
     await full('08-destination-home');
@@ -184,19 +179,13 @@ try {
   });
 
   await step('복귀 중 휴식 알림(구간별 독립)', async () => {
-    await page.getByRole('heading', { name: /곧 쉬어갈 시간이에요|잠깐 쉬어갈까요/ }).waitFor({ timeout: 60000 });
-    await page.keyboard.press('Escape');
-    return '복귀 구간에서도 알림 동작';
+    await page.locator('.rest-line.soon, .rest-line.due').first().waitFor({ timeout: 60000 });
+    return '복귀 구간에서도 휴식 상태 카드 동작';
   });
 
   await step('집 도착 → 여행 완료', async () => {
-    await page.getByText('집 근처에 도착했어요').first().waitFor({ timeout: 120000 });
-    // 도중에 뜬 휴식 알림(90분)은 닫습니다
-    if (await page.getByRole('heading', { name: /잠깐 쉬어갈까요|곧 쉬어갈/ }).count()) await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
-    await page.locator('.action', { hasText: '집 도착 · 여행 완료' }).click();
-    await page.getByRole('heading', { name: '집에 도착했나요?' }).waitFor();
-    await page.locator('.sheet .btn.primary', { hasText: '여행 완료' }).click();
+    await page.locator('.drive-head .t', { hasText: '집 근처에 도착했어요' }).waitFor({ timeout: 120000 });
+    await page.locator('.ca', { hasText: '여행 완료' }).click();
     await page.waitForTimeout(2500);
   });
 

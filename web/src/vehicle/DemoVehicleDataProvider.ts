@@ -92,6 +92,16 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
     this.emit();
   }
 
+  /** 데모 상태 테스트: 목적지 바로 앞(remainKm)으로 이동. 지나친 정차·오류 좌표 이벤트는 건너뜀 */
+  jumpNearEnd(remainKm = 0.4) {
+    const target = Math.max(this.st.km, this.route.totalKm - remainKm);
+    this.st.km = target;
+    while (this.route.stops[this.st.stopIdx] && this.route.stops[this.st.stopIdx].atKm <= target) this.st.stopIdx += 1;
+    while (this.route.badFixes[this.st.badIdx] && this.route.badFixes[this.st.badIdx].atKm <= target) this.st.badIdx += 1;
+    this.st.stopLeftSec = 0;
+    this.emit();
+  }
+
   snapshot(): DemoSnapshot {
     return { ...this.st };
   }

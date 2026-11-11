@@ -1,6 +1,8 @@
 // 새 여행 시작 영역의 기본 배경 일러스트(앱 자체 제작 SVG). 반려견 사진과 별도로 관리합니다.
 // 실제 장소·실제 반려견을 그린 것이 아니라 ‘여행 분위기’를 위한 일러스트입니다.
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
+import coastPhoto from '../assets/bg-coast.jpg';
+import coastThumb from '../assets/bg-coast-thumb.jpg';
 
 export type SceneId = 'sea' | 'forest' | 'sunset';
 export const SCENE_LABEL: Record<SceneId, string> = { sea: '바닷가 드라이브', forest: '푸른 숲길', sunset: '노을 드라이브' };
@@ -95,7 +97,12 @@ function Sunset() {
 
 const SCENES: Record<SceneId, () => ReactElement> = { sea: Sea, forest: Forest, sunset: Sunset };
 
-export function TripScene({ id, className }: { id: SceneId; className?: string }) {
+/** 기본 배경(바닷가 드라이브)은 사진, 나머지는 일러스트. 사진을 불러오지 못하면 일러스트로 대체 */
+export function TripScene({ id, className, thumb = false }: { id: SceneId; className?: string; thumb?: boolean }) {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  if (id === 'sea' && !photoFailed) {
+    return <img className={className} src={thumb ? coastThumb : coastPhoto} alt="바닷가 해안도로 기본 배경" onError={() => setPhotoFailed(true)} style={{ objectFit: 'cover', objectPosition: 'center 60%' }} />;
+  }
   const S = SCENES[id] ?? Sea;
   return (
     <svg className={className} viewBox="0 0 800 400" preserveAspectRatio="xMidYMid slice" role="img" aria-label={`${SCENE_LABEL[id] ?? SCENE_LABEL.sea} 배경 일러스트`}>
