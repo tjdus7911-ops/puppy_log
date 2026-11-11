@@ -4,7 +4,7 @@
 //  - 최근 7일 안에 완료한 여행  → 여행 완료 홈(+ 일반 홈 항목)
 //  - 그 외                     → 일반 홈
 import { useState, useSyncExternalStore } from 'react';
-import { Bell, BellRing, BookImage, MapPinned, MonitorSmartphone, ChevronRight, Coffee, Navigation, Search, Share2, ShieldCheck, Sparkles, Trees, Waves } from 'lucide-react';
+import { Bell, BellRing, BookImage, Image as ImageIcon, MapPinned, MonitorSmartphone, ChevronRight, Coffee, Navigation, Search, Share2, ShieldCheck, Sparkles, Trees, Waves } from 'lucide-react';
 import { REGIONS } from '../domain/regions';
 import { SAFETY_ITEMS } from '../domain/plan';
 import { realStats, useStore } from '../app/store';
@@ -16,12 +16,14 @@ import type { Trip } from '../domain/models';
 import { TripController } from '../trip/TripController';
 import { useWide } from '../app/useWide';
 import { openCarPreview } from '../CarPreview';
-import { PawGlyph, PetAvatar } from '../ui/Art';
+import { PawGlyph } from '../ui/Art';
 import { Sheet } from '../ui/components';
 import { MapView } from '../ui/MapView';
 import { PhotoFallback, PlaceRow, SectionHeader, StatStrip, TripPhotoCard } from '../ui/kit';
 import { PET_SIZE_LABEL as SIZE_LABEL } from '../domain/models';
 import { aggregatePaws } from './PawMap';
+import { PetHero } from './home/PetHero';
+import { BackgroundSheet, TripBackground } from './home/TripBackground';
 import { SafetyCheck } from './SafetyCheck';
 import TripLive from './TripLive';
 import Destination from './Destination';
@@ -42,48 +44,38 @@ export default function Home() {
   return <IdleWrap />;
 }
 
-/** 차량 가로 화면(대기): 왼쪽 큰 사진 패널 + 오른쪽 기존 홈. 모바일은 기존 홈 그대로 */
+/** 차량 가로 화면(대기): 왼쪽 반려견 개인화 패널 + 오른쪽 여행 계획(홈). 모바일은 한 화면에 위아래로 */
 function IdleWrap() {
   const wide = useWide();
   if (!wide) return <IdleHome />;
   return (
     <div className="car-idle">
       <CarIdlePanel />
-      <div className="ci-side"><IdleHome /></div>
+      <div className="ci-side"><IdleHome inCar /></div>
     </div>
   );
 }
 
 function CarIdlePanel() {
-  const { pets, trips } = useStore();
+  const { pets } = useStore();
   const pet = pets[0];
-  const photo = pet?.photoUri ?? trips.find((t) => t.status === 'ended' && t.coverPhotoUri)?.coverPhotoUri ?? null;
-  const fromPet = !!pet?.photoUri;
-  const name = pet ? callName(pet.name) : '우리 강아지';
   const actions = [
     { icon: Navigation, t: '스마트 주행', s: '목적지·휴식 계획 세우기', go: () => navigate(pet ? '/trip/setup' : '/pet/new') },
     { icon: BellRing, t: '휴식 알림', s: pet ? `${pet.restIntervalMinutes}분 간격 · 바꾸기` : '간격 설정', go: () => navigate(pet ? `/pet/${pet.id}` : '/my') },
     { icon: MapPinned, t: '동반 장소 추천', s: '근처 반려견 동반 장소', go: () => navigate('/explore') },
   ];
   return (
-    <section className={`ci-panel ${photo ? '' : 'nophoto'}`} aria-label="출발 준비">
-      {photo ? <img src={photo} alt={pet ? `${pet.name} 사진` : ''} /> : <PhotoFallback size={72} />}
-      {photo && <span className="badge photo ci-src">{fromPet ? '프로필 사진' : '지난 여행 사진'}</span>}
-      <div className="ci-copy">
-        <p className="k"><PawGlyph size={18} color="#fff" />멍로드 · 대기 중</p>
-        <h1>{name}와 떠날<br />준비가 되었어요</h1>
-        <p className="s">{pet ? '목적지를 정하면 맞춤 휴식 계획을 짜드려요.' : '반려견을 먼저 등록해 주세요.'}</p>
-      </div>
+    <PetHero pets={pets} variant="panel">
       <div className="ci-acts">
         {actions.map((a) => (
           <button key={a.t} onClick={a.go}><span className="ic"><a.icon size={24} /></span><span className="t">{a.t}</span><span className="s">{a.s}</span></button>
         ))}
       </div>
-    </section>
+    </PetHero>
   );
 }
 
-function IdleHome() {
+function IdleHome({ inCar = false }: { inCar?: boolean }) {
   const wideNow = useWide();
   const { pets, trips, tripPets, settings } = useStore();
   const [petIdx, setPetIdx] = useState(0);
@@ -95,7 +87,8 @@ function IdleHome() {
   const lastDone = completed[0];
   const showCompleted = !!lastDone && Date.now() - (lastDone.endTime ?? lastDone.startTime) < COMPLETED_HOME_DAYS * 86400_000;
   const regions = new Set(realDone.map((t) => regionShort(t.endLocation)).filter((r) => r && r !== '알 수 없음'));
-  const heroPhoto = pet?.photoUri ?? completed.find((t) => t.coverPhotoUri)?.coverPhotoUri ?? null;
+  const [bgOpen, setBgOpen] = useState(false);
+  const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const name = pet ? callName(pet.name) : '우리 강아지';
   const hour = new Date().getHours();
   const greet = hour < 11 ? '좋은 아침이에요' : hour < 18 ? '좋은 오후예요' : '편안한 저녁이에요';
@@ -103,26 +96,27 @@ function IdleHome() {
 
   return (
     <div className="screen">
-      <header className="home-head">
-        <button className="avatar" style={{ width: 52, height: 52, border: 0, padding: 0 }} aria-label="반려견 프로필" onClick={() => navigate(pet ? `/pet/${pet.id}` : '/pet/new')}>
-          <PetAvatar uri={pet?.photoUri ?? null} size={52} />
-        </button>
+      <header className="home-greet">
         <div className="grow">
-          <p className="t-cap">{pet ? [pet.name, pet.ageYears != null ? `${pet.ageYears}살` : null, SIZE_LABEL[pet.size]].filter(Boolean).join(' · ') : '멍로드'}</p>
+          <p className="t-cap">{pets.length > 1 ? `반려견 ${pets.length}마리 · ${pets.map((p) => p.name).join(', ')}` : pet ? [pet.name, pet.ageYears != null ? `${pet.ageYears}살` : null, SIZE_LABEL[pet.size]].filter(Boolean).join(' · ') : '멍로드'}</p>
           <h1 className="h-lg" style={{ fontSize: 22 }}>{settings.userName ? `${settings.userName}님, ` : ''}{greet},<br />오늘은 어디로 갈까요?</h1>
         </div>
-        {pets.length > 1 ? (
-          <button className="chip" style={{ minHeight: 36, padding: '0 12px', fontSize: 13 }} onClick={() => setPetIdx((petIdx + 1) % pets.length)}>다른 친구</button>
-        ) : (
-          <button className="round-btn" aria-label="설정" onClick={() => navigate('/my')}><Bell size={20} /></button>
+        {pets.length > 1 && (
+          <button className="chip" style={{ minHeight: 36, padding: '0 12px', fontSize: 13 }} onClick={() => setPetIdx((petIdx + 1) % pets.length)} aria-label="통계를 볼 반려견 바꾸기">{pet?.name} 통계</button>
         )}
+        <button className="round-btn" aria-label="설정" onClick={() => navigate('/my')}><Bell size={20} /></button>
       </header>
 
-      <div className="stack" style={{ marginTop: 24 }}>
-        {/* 핵심 CTA: 새 여행 시작 */}
+
+      <div className="stack" style={{ marginTop: 20 }}>
+        {/* 반려견 개인화 영역(차량 화면에서는 왼쪽 패널에 있으므로 생략) */}
+        {!inCar && <PetHero pets={pets} variant="card" />}
+
+        {/* 핵심 CTA: 새 여행 시작 — 반려견 사진 대신 여행 배경(별도 관리) */}
         <section className="hero-cta" aria-label="새 여행 시작">
-          <div className="ph">
-            {heroPhoto ? <img src={heroPhoto} alt={pet ? `${pet.name} 사진` : ''} /> : <PhotoFallback size={64} />}
+          <div className="ph scene">
+            <TripBackground />
+            <button className="bg-btn" onClick={() => setBgOpen(true)} disabled={live.driving} aria-label="여행 배경 변경"><ImageIcon size={14} />배경 변경</button>
             <button className="badge photo" style={{ border: 0, cursor: 'pointer', height: 28, padding: '0 10px' }} onClick={() => setSafetyOpen(true)}>
               <ShieldCheck size={14} />출발 전 안전 체크 {safetyDone}/{SAFETY_ITEMS.length}
             </button>
@@ -220,6 +214,7 @@ function IdleHome() {
       <Sheet open={safetyOpen} onClose={() => setSafetyOpen(false)} labelledBy="safety-title">
         <SafetyCheck />
       </Sheet>
+      <BackgroundSheet open={bgOpen && !live.driving} onClose={() => setBgOpen(false)} />
     </div>
   );
 }

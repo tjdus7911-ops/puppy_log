@@ -158,6 +158,7 @@ export default function TripSetup() {
         {/* 2. 반려견 */}
         <section>
           {step(2, '함께 이동할 반려견')}
+          {pets.length > 1 && <p className="t-cap" style={{ margin: '-4px 0 12px' }}>여러 마리를 함께 선택할 수 있어요 · 선택한 반려견만 이번 여행 기록에 연결돼요 ({selected.length}/{pets.length}마리 선택)</p>}
           <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'stretch' }}>
             {pets.map((p) => {
               const on = selected.includes(p.id);

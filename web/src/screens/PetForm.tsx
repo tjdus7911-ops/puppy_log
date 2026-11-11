@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
+import { TripController } from '../trip/TripController';
 import { Camera, Minus, Plus, Trash2 } from 'lucide-react';
 import { useStore } from '../app/store';
 import { navigate, queryParam } from '../app/router';
@@ -50,7 +51,9 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
   const today = new Date().toISOString().slice(0, 10);
   const birthError = form.birthDate && form.birthDate > today ? '미래 날짜는 입력할 수 없어요.' : null;
 
+  const driving = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot).driving;
   const pickPhoto = async () => {
+    if (driving) { toast('주행 중에는 사진을 바꿀 수 없어요. 정차 후 이용해 주세요.', 'error'); return; }
     const files = await pickImages(false);
     if (!files) return; // 사진 선택 취소: 아무것도 바꾸지 않음
     try {
@@ -92,7 +95,8 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
             <Camera size={17} />
           </span>
         </button>
-        {form.photoUri && <button className="link" onClick={() => set('photoUri', null)}>사진 지우기</button>}
+        {form.photoUri && !driving && <button className="link" onClick={() => set('photoUri', null)}>사진 지우기</button>}
+        {driving && <p className="t-cap mt-8">주행 중에는 사진 편집이 잠겨요</p>}
       </div>
 
       <Field label="이름" error={nameError}>

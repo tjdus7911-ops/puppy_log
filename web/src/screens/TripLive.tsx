@@ -47,6 +47,18 @@ export const HAZARD_COLOR: Record<HazardType, string> = {
 const formatHM = (sec: number) => `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}`;
 const formatKmNum = (km: number) => (km >= 100 ? String(Math.round(km)) : km.toFixed(1).replace(/\.0$/, ''));
 const shortDest = (name: string) => name.split(' ')[0];
+/** 이번 여행에 함께하는 반려견 프로필(겹친 아바타). 3마리 넘으면 +N */
+function PetStack({ pets, names, size }: { pets: { id: string; name: string; photoUri: string | null }[]; names: string[]; size: number }) {
+  const list = pets.length ? pets : names.map((n) => ({ id: n, name: n, photoUri: null }));
+  const shown = list.slice(0, 3);
+  return (
+    <span className="pet-stack" style={{ height: size }} aria-label={`함께하는 반려견: ${list.map((p) => p.name).join(', ')}`}>
+      {shown.map((p, i) => <span key={p.id} className="ps" style={{ marginLeft: i ? -size * 0.36 : 0, zIndex: 10 - i }}><PetAvatar uri={p.photoUri} size={size} /></span>)}
+      {list.length > 3 && <span className="ps more" style={{ width: size, height: size, marginLeft: -size * 0.36 }}>+{list.length - 3}</span>}
+    </span>
+  );
+}
+
 function regionShortLabel(p: GeoPoint | null, fallback: string) { const r = p ? regionShort(p) : ''; return r && r !== '알 수 없음' ? r : fallback; }
 
 function withPets(names: string[]) {
@@ -336,7 +348,7 @@ export default function TripLive() {
     return (
       <div className="cd">
         <header className="cd-head">
-          <PetAvatar uri={pet?.photoUri ?? null} size={56} />
+          <PetStack pets={tripPets} names={live.petNames} size={56} />
           <div className="grow" style={{ minWidth: 0 }}>
             <p className="t ellipsis">{withPets(live.petNames)} {destTitle} {isReturn ? '돌아가는 중' : '이동 중'}</p>
             <p className="s ellipsis">{isReturn ? `${fromLabel} → ${toLabel}` : live.trip.destinationName ?? '목적지 미설정 · 가는 길 기록 중'}</p>
@@ -357,7 +369,7 @@ export default function TripLive() {
           <aside className="cd-left" aria-label="반려견과 여행 정보">
             <section className={`cd-dog ${pet?.photoUri ? '' : 'nophoto'}`}>
               {pet?.photoUri ? <img src={pet.photoUri} alt="" /> : <PhotoFallback size={44} />}
-              <div className="cap"><p className="t ellipsis">{joinNames(live.petNames) || '우리 강아지'}</p><p className="s">{pet ? `${PET_SIZE_LABEL[pet.size]}${tripPets.length > 1 ? ` · 외 ${tripPets.length - 1}마리` : ''}` : '반려견 정보 없음'}</p></div>
+              <div className="cap"><p className="t ellipsis">{joinNames(live.petNames) || '우리 강아지'}</p><p className="s">{tripPets.length > 1 ? `이번 여행 ${tripPets.length}마리 함께` : pet ? PET_SIZE_LABEL[pet.size] : '반려견 정보 없음'}</p></div>
               {!pet?.photoUri && <span className="badge photo">프로필 사진을 등록해 보세요</span>}
             </section>
             <ul className="cd-stats">
@@ -448,7 +460,7 @@ export default function TripLive() {
         {mapEl}
         <div className="top">
           <div className="drive-head">
-            <button className="avatar" style={{ border: 0, padding: 0, width: 40, height: 40 }} aria-label="홈으로 (기록은 계속돼요)" onClick={() => navigate('/home')}><PetAvatar uri={tripPets[0]?.photoUri ?? null} size={40} /></button>
+            <button style={{ all: 'unset', cursor: 'pointer' }} aria-label="홈으로 (기록은 계속돼요)" onClick={() => navigate('/home')}><PetStack pets={tripPets} names={live.petNames} size={40} /></button>
             <div className="grow" style={{ minWidth: 0 }}><p className="t ellipsis">{headline}</p><p className="s ellipsis num">{routeLine}</p></div>
             {isDemo ? <span className="badge sample">데모</span> : <span className={`status-pill ${e.status}`} role="status" style={{ height: 28, fontSize: 12.5, padding: '0 10px' }}><St.icon size={14} />{St.label}</span>}
           </div>

@@ -357,6 +357,13 @@ export const repo = {
     return guard(async () => void (await (await getDb()).delete('blocks', authorId)));
   },
   /** 예시 게시물의 좋아요·저장 등 내 상호작용(서버가 없으므로 기기에만) */
+  /** 홈 ‘새 여행 시작’ 배경(이 기기에만 저장) */
+  async getHomeBackground(): Promise<unknown> {
+    return guard(async () => (await (await getDb()).get('kv', 'homeBackground')) ?? null);
+  },
+  async saveHomeBackground(v: unknown | null) {
+    return guard(async () => { const db = await getDb(); if (v) await db.put('kv', v, 'homeBackground'); else await db.delete('kv', 'homeBackground'); });
+  },
   async getInteractions(): Promise<Record<string, { liked?: boolean; saved?: boolean }>> {
     return guard(async () => ((await (await getDb()).get('kv', 'postInteractions')) as Record<string, { liked?: boolean; saved?: boolean }> | undefined) ?? {});
   },
