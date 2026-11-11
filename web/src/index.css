@@ -52,7 +52,7 @@ h1, h2, h3, p { margin: 0; }
   margin: 0 auto;
   background: var(--bg);
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.06);
-  overflow-x: hidden;
+  overflow-x: clip; /* hidden 은 하단 고정 버튼(sticky)을 막음 */
 }
 .app-frame.wide { max-width: 1280px; }
 
@@ -853,7 +853,7 @@ button.place-row { cursor: pointer; }
   radial-gradient(900px 420px at 0% -10%, rgba(106, 156, 247, 0.10), transparent 60%),
   radial-gradient(700px 380px at 110% 0%, rgba(221, 245, 234, 0.55), transparent 60%),
   var(--bg); }
-.topbar { background: transparent; backdrop-filter: blur(12px); }
+.topbar { background: rgba(247, 249, 254, 0.88); backdrop-filter: saturate(160%) blur(14px); }
 
 /* ── 버튼 ── */
 .btn { transition: transform .1s ease, box-shadow .2s ease, filter .2s ease, background .2s ease; position: relative; isolation: isolate; }
@@ -966,3 +966,20 @@ button.place-row { cursor: pointer; }
 .cd-right .car-map .reco-slot .reco-pop { box-shadow: var(--shadow-lg), var(--ring); border: 0; background: rgba(255,255,255,.96); backdrop-filter: blur(14px); }
 .hero-cta .ph:not(:has(img)) { background: radial-gradient(60% 70% at 85% 0%, rgba(141,174,245,.65), transparent 70%), linear-gradient(150deg, #6a9cf7, #3463bd 70%, #244a91); }
 .hero-cta .ph:not(:has(img)) .ph-fallback { background: transparent; color: rgba(255,255,255,.4); }
+
+/* 투뎁스 화면에도 하단 메뉴 표시: 하단 고정 버튼은 메뉴 위로 */
+.app-frame.has-nav .screen.no-nav { padding-bottom: calc(var(--nav-h) + var(--safe-b) + 32px); }
+.app-frame.has-nav .bottom-cta { bottom: calc(var(--nav-h) + var(--safe-b)); padding-bottom: 16px; }
+.app-frame.has-nav .bottom-cta ~ * { margin-bottom: 0; }
+
+/* 차량 화면 미리보기 */
+.carpv { min-height: 100dvh; background: radial-gradient(80% 60% at 50% 0%, #2b3f66, #0f1726 70%); display: grid; justify-items: center; align-content: start; gap: 12px; padding: 12px; color: #fff; }
+.carpv-bar { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 1600px; flex-wrap: wrap; }
+.carpv-bar .t { font-weight: 700; font-size: 16px; }
+.carpv-bar .s { font-size: 13px; opacity: .7; flex: 1; }
+.carpv-stage { position: relative; border-radius: 18px; overflow: hidden; box-shadow: 0 0 0 6px #1b2436, 0 0 0 7px #34425d, 0 30px 60px -20px rgba(0,0,0,.7); }
+.carpv-stage iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #f7f9fe; }
+.carpv-entry { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: 20px; background: linear-gradient(120deg, #fff 30%, #eef4ff); box-shadow: var(--shadow), var(--ring); }
+.carpv-entry .ic { width: 44px; height: 44px; border-radius: 14px; background: var(--grad-primary); color: #fff; display: grid; place-items: center; flex: none; box-shadow: var(--shadow-primary); }
+.carpv-entry b { display: block; font-size: 15.5px; }
+.carpv-entry span span, .carpv-entry .grow > span { display: block; font-size: 13px; color: var(--text-2); margin-top: 2px; }

@@ -232,12 +232,18 @@ function Shell() {
     );
   }
 
+  // 하단 메뉴: 투뎁스 화면에서도 표시(바로 다른 탭으로 이동 가능).
+  // 숨기는 곳: 주행 중 화면, 커뮤니티 상세(다크 전체 화면)·게시물 작성 흐름(전용 하단 버튼 사용)
+  const hideBottomNav = path === '/trip/live' || (path === '/home' && live.driving)
+    || path.startsWith('/community/new') || (path.startsWith('/community/post/') && !path.endsWith('/place'));
+  const mobileNav = showNav && !hideBottomNav;
+
   return (
-    <div className="app-frame">
+    <div className={`app-frame ${mobileNav ? 'has-nav' : ''}`}>
       {storageWarn}
       {screen}
       {pill}
-      {['/home', '/explore', '/album', '/pawmap', '/community', '/my'].includes(path) && !(path === '/home' && live.driving) && (
+      {mobileNav && (
         <nav className="bottom-nav" aria-label="하단 메뉴">
           {TABS.map((t) => {
             const on = activeTab === t.key;

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
-import { ChevronRight, FlaskConical, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 , Map as MapIcon } from 'lucide-react';
+import { ChevronRight, FlaskConical, MonitorSmartphone, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 , Map as MapIcon } from 'lucide-react';
 import { realStats, useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { repo } from '../data/db';
@@ -12,6 +12,7 @@ import { Hint, Sheet, Switch, TopBar } from '../ui/components';
 import { PetAvatar } from '../ui/Art';
 import { RestIntervalPicker } from './PetForm';
 import { DEMO_SPEEDS } from './TripSetup';
+import { openCarPreview } from '../CarPreview';
 
 type Wipe = 'demo' | 'trips' | 'all' | null;
 
@@ -100,6 +101,15 @@ export default function MyPage() {
           </div>
           <p className="t-cap mt-12">실제 동작 = 이 기기에서 실제로 동작 · 데모 = 가상 데이터(화면에 데모/샘플 배지) · 미연동 = 키·서버 설정 필요</p>
         </div>
+      </section>
+
+      <section className="section">
+        <h2 className="h-md" style={{ marginBottom: 12 }}>화면 미리보기</h2>
+        <button className="carpv-entry" onClick={openCarPreview}>
+          <span className="ic"><MonitorSmartphone size={22} /></span>
+          <span className="grow"><b>차량 화면(1600×900)으로 보기</b><span>휴대폰·좁은 창에서도 차량 대시보드를 축소해 보여줘요</span></span>
+          <ChevronRight size={20} color="var(--text-3)" />
+        </button>
       </section>
 
       <section className="section">

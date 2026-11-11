@@ -4,7 +4,7 @@
 //  - 최근 7일 안에 완료한 여행  → 여행 완료 홈(+ 일반 홈 항목)
 //  - 그 외                     → 일반 홈
 import { useState, useSyncExternalStore } from 'react';
-import { Bell, BellRing, BookImage, MapPinned, ChevronRight, Coffee, Navigation, Search, Share2, ShieldCheck, Sparkles, Trees, Waves } from 'lucide-react';
+import { Bell, BellRing, BookImage, MapPinned, MonitorSmartphone, ChevronRight, Coffee, Navigation, Search, Share2, ShieldCheck, Sparkles, Trees, Waves } from 'lucide-react';
 import { REGIONS } from '../domain/regions';
 import { SAFETY_ITEMS } from '../domain/plan';
 import { realStats, useStore } from '../app/store';
@@ -15,6 +15,7 @@ import { regionShort } from '../domain/regions';
 import type { Trip } from '../domain/models';
 import { TripController } from '../trip/TripController';
 import { useWide } from '../app/useWide';
+import { openCarPreview } from '../CarPreview';
 import { PawGlyph, PetAvatar } from '../ui/Art';
 import { Sheet } from '../ui/components';
 import { MapView } from '../ui/MapView';
@@ -83,6 +84,7 @@ function CarIdlePanel() {
 }
 
 function IdleHome() {
+  const wideNow = useWide();
   const { pets, trips, tripPets, settings } = useStore();
   const [petIdx, setPetIdx] = useState(0);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -141,6 +143,7 @@ function IdleHome() {
                   </button>
                 )}
                 <button className="btn primary block xl" onClick={() => navigate('/trip/setup')}>여행 시작하기</button>
+                {!wideNow && <button className="link" style={{ justifySelf: 'center', fontSize: 13 }} onClick={openCarPreview}><MonitorSmartphone size={15} style={{ verticalAlign: -3, marginRight: 4 }} />차량 화면(1600×900)으로 미리보기</button>}
               </>
             ) : (
               <button className="btn primary block xl" onClick={() => navigate('/pet/new')}>반려견 먼저 등록하기</button>

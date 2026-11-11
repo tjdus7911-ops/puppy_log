@@ -31,6 +31,7 @@ import { RoadMap } from '../ui/RoadMap';
 import type { MapMarker } from '../ui/MapView';
 import { DEMO_SPEEDS } from './TripSetup';
 import { AutoSuggest } from './AutoSuggest';
+import { openCarPreview } from '../CarPreview';
 
 const STATUS = {
   driving: { label: '주행 중', icon: Car },
@@ -473,6 +474,7 @@ export default function TripLive() {
         {voice.text && <p className="voice-line">{voice.text}</p>}
         {voiceChips}
         <p id="drive-lock" className="drive-lock"><Lock size={13} />{lockText}</p>
+        <button className="link" style={{ justifySelf: 'center', fontSize: 12.5 }} onClick={openCarPreview}>차량 화면(1600×900)으로 보기</button>
         {details}
       </div>
       {sheets()}
