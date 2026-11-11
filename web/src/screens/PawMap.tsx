@@ -6,6 +6,9 @@ import type { VisitedPlace } from '../domain/models';
 import { nearestRegion, type Region } from '../domain/regions';
 import { MapView } from '../ui/MapView';
 import { EmptyState, Segmented, TopBar } from '../ui/components';
+import { PawGlyph } from '../ui/Art';
+import { navigate } from '../app/router';
+import { formatKm } from '../domain/format';
 import { TripCard } from './Album';
 
 /** 발도장 = 실제 여행의 도착 지역 + 실제(샘플 아님) 방문 장소의 지역 */
@@ -51,10 +54,23 @@ export default function PawMap() {
         markers={paws.map((p) => ({ id: p.region.id, point: p.region, kind: 'paw' as const, count: p.tripIds.size, active: p.region.id === sel, label: `${p.region.name} ${p.tripIds.size}회`, onClick: () => setSel(p.region.id === sel ? null : p.region.id) }))}
         ariaLabel="발도장 지도"
       />
-      <div className="grid-2 mt-16">
-        <div className="stat"><span className="k">발도장 찍은 지역</span><p className="v">{paws.length}곳</p></div>
-        <div className="stat"><span className="k">가장 많이 간 곳</span><p className="v">{paws[0] ? `${paws[0].region.name} ${paws[0].tripIds.size}회` : '—'}</p></div>
+      <div className="card mt-16" style={{ padding: '16px 10px' }}>
+        <div className="grid-3">
+          <div><p className="k">총 여행 횟수</p><p className="v" style={{ fontSize: 22 }}>{ended.length}회</p></div>
+          <div><p className="k">누적 이동 거리</p><p className="v" style={{ fontSize: 22 }}>{formatKm(ended.reduce((a, t) => a + t.totalDistanceKm, 0))}</p></div>
+          <div><p className="k">방문 지역</p><p className="v" style={{ fontSize: 22 }}>{paws.length}곳</p></div>
+        </div>
       </div>
+      {paws.length > 0 && (
+        <div className="region-cards mt-12">
+          {paws.slice(0, 6).map((p) => (
+            <button key={p.region.id} className="region-card" onClick={() => navigate(`/album?region=${encodeURIComponent(p.region.name)}${source === 'demo' ? '&src=demo' : ''}`)}>
+              <PawGlyph size={22} color="var(--primary)" />
+              <span>{p.region.name}</span><b>{p.tripIds.size}회</b>
+            </button>
+          ))}
+        </div>
+      )}
 
       {paws.length === 0 ? (
         <div className="card mt-16"><EmptyState title="아직 발도장이 없어요" desc="여행을 마치면 도착한 지역에 발도장이 찍혀요." /></div>

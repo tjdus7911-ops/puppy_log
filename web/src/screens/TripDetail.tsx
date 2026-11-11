@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { Check, Coffee, Download, FlaskConical, ImagePlus, Lock, MapPin, Pencil, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
+import { Camera, Car, Check, ChevronRight, Clock3, Coffee, Download, FlaskConical, ImagePlus, Lock, MapPin, Pencil, PenLine, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useStore } from '../app/store';
 import { navigate, queryParam } from '../app/router';
 import { fileToDataUrl, pickImages } from '../app/image';
@@ -205,6 +205,22 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
         <p className="t-cap mt-8">함께한 친구: {names.join(', ') || '정보 없음'} · 기록 방식: {SOURCE_LABEL[trip.source]}</p>
       </div>
 
+      {/* 시안: 정차 중 여행 기록 — 핵심 통계 + 여행 일기 보기 + 사진 추가 · 일기 편집 · 공유하기 */}
+      <div className="card mt-16" style={{ padding: '16px 18px' }}>
+        <div className="grid-3">
+          <div><Car size={20} color="var(--primary)" /><p className="v">{formatKm(trip.totalDistanceKm)}</p><p className="k">총 이동 거리</p></div>
+          <div><Clock3 size={20} color="var(--primary)" /><p className="v">{formatDuration(trip.drivingDurationSeconds)}</p><p className="k">주행 시간</p></div>
+          <div><Coffee size={20} color="var(--primary)" /><p className="v">휴식 {rests.filter((r) => r.endTime).length}회</p><p className="k">휴식 횟수</p></div>
+        </div>
+        <button className="btn primary block mt-16" onClick={() => navigate(`/album/${trip.id}/diary`)}>여행 일기 보기 <ChevronRight size={18} /></button>
+      </div>
+      <div className="tile-row mt-12">
+        <button className="tile" disabled={driving} onClick={addPhotos}><Camera size={26} />사진 추가</button>
+        <button className="tile" disabled={driving} onClick={() => navigate(`/album/${trip.id}/diary`)}><PenLine size={26} />일기 편집</button>
+        <button className="tile" onClick={makeShare}><Share2 size={26} />공유하기</button>
+      </div>
+      {driving && <p className="lock-note mt-8"><Lock size={15} />주행 중에는 상세 편집이 잠겨요. 정차 후 이용해 주세요.</p>}
+
       {route2.length > 1 ? (
         <div className="mt-16"><MapView route={route2} markers={markers} height={240} ariaLabel="이동 경로 지도" /></div>
       ) : (
@@ -237,7 +253,7 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
           <div className="card mt-12" style={{ padding: '4px 18px' }}>
             {rests.map((r, i) => (
               <div key={r.id} className="row-item">
-                <div style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--accent-soft)', color: '#a26c12', display: 'grid', placeItems: 'center' }}><Coffee size={18} /></div>
+                <div style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--accent-soft)', color: '#B5730D', display: 'grid', placeItems: 'center' }}><Coffee size={18} /></div>
                 <div className="grow">
                   <p style={{ fontWeight: 650 }}>{i + 1}번째 휴식 · {r.endTime ? formatDuration((r.endTime - r.startTime) / 1000) : '진행 중'}</p>
                   <p className="t-cap">{formatTime(r.startTime)} ~ {r.endTime ? formatTime(r.endTime) : ''} · {r.latitude != null && r.longitude != null ? regionLabel({ latitude: r.latitude, longitude: r.longitude }) : '위치 정보 없음'}</p>

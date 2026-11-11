@@ -16,6 +16,7 @@ import { EmptyState, Hint, Loading, Sheet, TopBar } from '../ui/components';
 import { CategoryIcon, PlaceThumb } from '../ui/Art';
 
 const CATS = Object.keys(CATEGORY_LABEL) as PlaceCategory[];
+type CatSel = PlaceCategory | 'all';
 const MODES: { value: SearchMode; label: string }[] = [
   { value: 'current', label: '현재 위치' },
   { value: 'destination', label: '목적지' },
@@ -29,8 +30,8 @@ type Center = { points: GeoPoint[]; label: string; origin: GeoPoint | null } | {
 export default function Explore({ route }: { route: string }) {
   const { settings, trips, toast } = useStore();
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
-  const initialCat = (queryParam(route, 'cat') as PlaceCategory) || 'restaurant';
-  const [cat, setCat] = useState<PlaceCategory>(CATS.includes(initialCat) ? initialCat : 'restaurant');
+  const initialCat = queryParam(route, 'cat') as PlaceCategory | null;
+  const [cat, setCat] = useState<CatSel>(initialCat && CATS.includes(initialCat) ? initialCat : 'all');
   const [mode, setMode] = useState<SearchMode>('current');
   const [regionText, setRegionText] = useState('');
   const [regionId, setRegionId] = useState<string | null>(null);
@@ -94,9 +95,8 @@ export default function Explore({ route }: { route: string }) {
     if (!center || 'error' in center || driving) return;
     const ac = new AbortController();
     setResults({ loading: true, error: null, places: [] });
-    provider
-      .search({ category: cat, centers: center.points, radiusKm: mode === 'route' ? 6 : 8 }, ac.signal)
-      .then((places) => setResults({ loading: false, error: null, places }))
+    Promise.all((cat === 'all' ? CATS : [cat]).map((c) => provider.search({ category: c, centers: center.points, radiusKm: mode === 'route' ? 6 : 8 }, ac.signal)))
+      .then((r) => setResults({ loading: false, error: null, places: r.flat() }))
       .catch((e) => { if (e.name !== 'AbortError') setResults({ loading: false, error: (e as Error).message, places: [] }); });
     return () => ac.abort();
   }, [center, cat, provider, nonce, driving, mode]);
@@ -121,6 +121,7 @@ export default function Explore({ route }: { route: string }) {
       <TopBar title="주변 탐색" showBack={false} right={provider.isSample ? <span className="badge sample">샘플 데이터</span> : <span className="badge">{provider.label}</span>} />
 
       <div className="chips scroll" role="tablist" aria-label="카테고리">
+        <button role="tab" aria-selected={cat === 'all'} className={`chip ${cat === 'all' ? 'on' : ''}`} onClick={() => setCat('all')}>전체</button>
         {CATS.map((c) => (
           <button key={c} role="tab" aria-selected={cat === c} className={`chip ${cat === c ? 'on' : ''}`} onClick={() => setCat(c)}>
             <CategoryIcon category={c} size={16} />{CATEGORY_LABEL[c]}
@@ -184,7 +185,7 @@ export default function Explore({ route }: { route: string }) {
             {sorted.map(({ place, distanceKm }) => <PlaceCard key={place.id} place={place} distanceKm={distanceKm} onOpen={() => setDetail(place)} />)}
             {sortedUnknown.length > 0 && (
               <>
-                <p className="t-cap mt-12" style={{ fontWeight: 600 }}>선택한 조건의 정보가 없는 장소 {sortedUnknown.length}곳 · 방문 전 확인이 필요해요</p>
+                <p className="t-cap mt-12" style={{ fontWeight: 600 }}>선택한 조건을 확인할 수 없는 장소 {sortedUnknown.length}곳 · 방문 전 확인이 필요해요</p>
                 {sortedUnknown.map(({ place, distanceKm }) => <PlaceCard key={place.id} place={place} distanceKm={distanceKm} onOpen={() => setDetail(place)} dim />)}
               </>
             )}
@@ -199,7 +200,7 @@ export default function Explore({ route }: { route: string }) {
 }
 
 function triLabel(v: Tri, kind: 'yes' | 'need' = 'yes') {
-  if (v == null) return '정보 없음';
+  if (v == null) return '확인 필요';
   if (kind === 'need') return v ? '필요' : '필요 없음';
   return v ? '가능' : '불가';
 }
@@ -223,7 +224,7 @@ function PlaceCard({ place, distanceKm, onOpen, dim }: { place: Place; distanceK
           </div>
           <p className="t-cap mt-8 ellipsis">{distanceKm != null ? `${formatKm(distanceKm)} · ` : ''}{place.address}</p>
           <div className="row mt-8" style={{ gap: 4, flexWrap: 'wrap' }}>
-            {tags.length ? tags.slice(0, 4).map((t) => <span key={t.k} className="badge">{t.k}</span>) : <span className="badge gray">동반 조건 정보 없음</span>}
+            {tags.length ? tags.slice(0, 4).map((t) => <span key={t.k} className="badge">{t.k}</span>) : <span className="badge gray">동반 조건 확인 필요</span>}
           </div>
         </div>
       </div>
@@ -258,7 +259,7 @@ function PlaceDetailSheet({ place, origin, onClose, onToast }: { place: Place | 
         {rows.map(([k, v]) => (
           <div key={k} className="row between" style={{ padding: '6px 0', fontSize: 14 }}>
             <span className="t-sub">{k}</span>
-            <span style={{ fontWeight: 650, color: v === '정보 없음' ? 'var(--text-3)' : v === '불가' ? '#b8453d' : 'var(--text)' }}>{v}</span>
+            <span style={{ fontWeight: 650, color: v === '확인 필요' ? 'var(--text-3)' : v === '불가' ? '#D93F3C' : 'var(--text)' }}>{v}</span>
           </div>
         ))}
       </div>

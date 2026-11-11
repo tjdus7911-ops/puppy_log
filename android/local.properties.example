@@ -1,0 +1,21 @@
+# 이 파일을 local.properties 로 복사한 뒤 값을 채우세요. (local.properties 는 git 에 올라가지 않습니다)
+# Android Studio 가 자동으로 넣는 SDK 경로
+sdk.dir=/Users/YOU/Library/Android/sdk
+
+# ── 기능 플래그 ─────────────────────────────────
+# 1단계: 둘 다 false 로 먼저 빌드·실행(데모 모드)
+mungroad.usePleosSdk=false
+mungroad.useKakaoMap=false
+
+# ── 카카오맵 지도 SDK (useKakaoMap=true 일 때) ────
+# 카카오디벨로퍼스 > 앱 > 플랫폼 키 > 네이티브 앱 키
+KAKAO_NATIVE_APP_KEY=
+
+# ── 프록시 서버 (장소 검색·도로 위험 정보·AI 일기) ─
+# 에뮬레이터에서 PC 의 localhost 는 10.0.2.2 입니다.
+MUNGROAD_API_BASE_URL=http://10.0.2.2:8787
+
+# ── SDK 버전 덮어쓰기(선택) ──────────────────────
+# pleos.vehicleVersion=2.3.2
+# pleos.naviHelperVersion=3.0.5
+# kakao.mapVersion=2.12.7

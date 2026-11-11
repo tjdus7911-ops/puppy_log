@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ChevronRight, FlaskConical, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 } from 'lucide-react';
+import { ChevronRight, FlaskConical, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 , Map as MapIcon } from 'lucide-react';
 import { realStats, useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { repo } from '../data/db';
@@ -22,6 +22,7 @@ export default function MyPage() {
   const [wipe, setWipe] = useState<Wipe>(null);
   const [api, setApi] = useState(settings.apiBaseUrl);
   const [name, setName] = useState(settings.userName);
+  const [jsKey, setJsKey] = useState(settings.kakaoJsKey);
 
   useEffect(() => {
     if (!navigator.permissions?.query) { setPerm('확인할 수 없음'); return; }
@@ -139,8 +140,8 @@ export default function MyPage() {
             { k: 'all' as const, label: '개인정보 및 위치 데이터 전체 삭제', desc: '반려견 프로필·설정까지 모두 초기화' },
           ].map((x) => (
             <button key={x.k} className="row-btn" disabled={live.active} onClick={() => setWipe(x.k)} style={{ opacity: live.active ? 0.5 : 1 }}>
-              <Trash2 size={18} color="#b8453d" />
-              <div className="grow"><p style={{ fontWeight: 650, color: x.k === 'all' ? '#b8453d' : undefined }}>{x.label}</p><p className="t-cap">{x.desc}</p></div>
+              <Trash2 size={18} color="#D93F3C" />
+              <div className="grow"><p style={{ fontWeight: 650, color: x.k === 'all' ? '#D93F3C' : undefined }}>{x.label}</p><p className="t-cap">{x.desc}</p></div>
             </button>
           ))}
         </div>
@@ -158,14 +159,19 @@ export default function MyPage() {
             void updateSettings({ apiBaseUrl: v });
             toast(v ? '서버 주소를 저장했어요.' : '샘플 데이터·기본 일기를 사용해요.');
           }}>저장</button>
-          <div className="mt-12"><Hint tone="green">API 키는 앱에 저장하지 않아요. 키는 서버(server/) 환경 변수에만 두고, 앱은 서버 주소만 알고 있어요.</Hint></div>
+          <div className="mt-12"><Hint tone="green">카카오 REST·ITS·AI 키는 앱에 저장하지 않아요. 키는 서버(server/) 환경 변수에만 두고, 앱은 서버 주소만 알고 있어요.</Hint></div>
+          <div className="divider" />
+          <div className="row"><MapIcon size={18} color="var(--text-2)" /><p style={{ fontWeight: 650 }}>카카오맵 JavaScript 키 (실제 지도)</p></div>
+          <input className="input mt-12" style={{ height: 46 }} placeholder="비우면 개요 지도(도로 없음)를 사용해요" value={jsKey} onChange={(e) => setJsKey(e.target.value)} />
+          <button className="btn secondary sm mt-12" onClick={() => { void updateSettings({ kakaoJsKey: jsKey.trim() }); toast(jsKey.trim() ? '지도 키를 저장했어요. 여행 화면에서 지도를 불러와요.' : '개요 지도를 사용해요.'); }}>저장</button>
+          <p className="t-cap mt-8">JavaScript 키는 도메인 제한 키예요. 카카오디벨로퍼스의 'JavaScript SDK 도메인'에 이 웹 주소(예: http://localhost:5173)를 등록해야 지도가 열려요.</p>
         </div>
       </section>
 
       <section className="section">
         <h2 className="h-md" style={{ marginBottom: 12 }}>앱 정보</h2>
         <div className="card t-sub" style={{ fontSize: 13.5 }}>
-          <div className="row"><Info size={18} color="var(--text-2)" /><p style={{ fontWeight: 700, color: 'var(--text)' }}>멍로드 MUNG ROAD · 웹 프로토타입 v0.1.0</p></div>
+          <div className="row"><Info size={18} color="var(--text-2)" /><p style={{ fontWeight: 700, color: 'var(--text)' }}>멍로드 MUNG ROAD · 웹 프로토타입 v0.2.0</p></div>
           <p className="mt-8">우리 강아지와 함께 달린 모든 길이 추억이 된다.</p>
           <p className="mt-8">이 웹 프로토타입은 사용자 흐름 검증용이에요. 최종 목표는 현대자동차 Pleos Connect용 Android 앱이며, 차량 SDK 연동은 Android 코드에서 진행해요.</p>
           <div className="divider" />

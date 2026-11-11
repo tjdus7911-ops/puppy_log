@@ -9,7 +9,9 @@ import { PawGlyph } from './Art';
 export interface MapMarker {
   id: string;
   point: GeoPoint;
-  kind: 'start' | 'end' | 'current' | 'rest' | 'place' | 'paw' | 'dest';
+  kind: 'start' | 'end' | 'current' | 'rest' | 'place' | 'paw' | 'dest' | 'hazard' | 'rec';
+  /** hazard 마커 색 (사고 빨강 · 공사 주황 · 낙하물 노랑 · 정체 보라) */
+  color?: string;
   label?: string;
   count?: number;
   active?: boolean;
@@ -24,11 +26,12 @@ interface Props {
   fit?: 'auto' | 'korea';
   padKm?: number;
   ariaLabel?: string;
+  note?: string;
 }
 
 const KOREA = { minLat: 33.0, maxLat: 38.7, minLon: 124.9, maxLon: 130.0 };
 
-export function MapView({ route = [], plannedRoute = [], markers = [], height = 240, fit = 'auto', padKm = 10, ariaLabel = '지도' }: Props) {
+export function MapView({ route = [], plannedRoute = [], markers = [], height = 240, fit = 'auto', padKm = 10, ariaLabel = '지도', note }: Props) {
   const H = height;
   const ref = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(400);
@@ -73,16 +76,16 @@ export function MapView({ route = [], plannedRoute = [], markers = [], height = 
   return (
     <div className="map" style={{ height }} ref={ref}>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={ariaLabel}>
-        <rect width={W} height={H} fill="#DCE9E6" />
+        <rect width={W} height={H} fill="#E3EEFC" />
         <path d={land.north} fill="#EEEDE6" stroke="#D5D3CA" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />
-        <path d={land.south} fill="#F7F4EC" stroke="#C9D6CE" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        <path d={land.south} fill="#F7F4EC" stroke="#C7D6F0" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         {plannedRoute.length > 1 && (
-          <path d={line(plannedRoute)} fill="none" stroke="#5B8C72" strokeOpacity="0.28" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="2 8" />
+          <path d={line(plannedRoute)} fill="none" stroke="#4D80E8" strokeOpacity="0.28" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="2 8" />
         )}
         {route.length > 1 && (
           <>
             <path d={line(route)} fill="none" stroke="#fff" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-            <path d={line(route)} fill="none" stroke="#5B8C72" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={line(route)} fill="none" stroke="#4D80E8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
           </>
         )}
         {markers.map((m) => {
@@ -90,7 +93,7 @@ export function MapView({ route = [], plannedRoute = [], markers = [], height = 
           return <Marker key={m.id} m={m} x={x} y={y} />;
         })}
       </svg>
-      <span className="map-note">지도 데이터 © Natural Earth</span>
+      <span className="map-note">{note ?? '지도 데이터 © Natural Earth'}</span>
     </div>
   );
 }
@@ -109,8 +112,8 @@ function Marker({ m, x, y }: { m: MapMarker; x: number; y: number }) {
   if (m.kind === 'current') {
     return (
       <g {...common}>
-        <circle r="14" fill="#5B8C72" opacity="0.18"><animate attributeName="r" values="9;16;9" dur="2s" repeatCount="indefinite" /></circle>
-        <circle r="7" fill="#5B8C72" stroke="#fff" strokeWidth="3" />
+        <circle r="14" fill="#4D80E8" opacity="0.18"><animate attributeName="r" values="9;16;9" dur="2s" repeatCount="indefinite" /></circle>
+        <circle r="7" fill="#4D80E8" stroke="#fff" strokeWidth="3" />
       </g>
     );
   }
@@ -118,9 +121,9 @@ function Marker({ m, x, y }: { m: MapMarker; x: number; y: number }) {
     const r = 13 + Math.min(6, (m.count ?? 1) * 1.5);
     return (
       <g {...common}>
-        <circle r={r} fill={m.active ? '#5B8C72' : '#fff'} stroke="#5B8C72" strokeWidth="2" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,.15))' }} />
+        <circle r={r} fill={m.active ? '#4D80E8' : '#fff'} stroke="#4D80E8" strokeWidth="2" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,.15))' }} />
         <g transform={`translate(${-r * 0.62} ${-r * 0.66})`}>
-          <PawGlyph size={r * 1.25} color={m.active ? '#fff' : '#5B8C72'} />
+          <PawGlyph size={r * 1.25} color={m.active ? '#fff' : '#4D80E8'} />
         </g>
         {m.count != null && m.count > 1 && (
           <g transform={`translate(${r * 0.8} ${-r * 0.8})`}>
@@ -131,7 +134,16 @@ function Marker({ m, x, y }: { m: MapMarker; x: number; y: number }) {
       </g>
     );
   }
-  const color = { start: '#252B28', end: '#5B8C72', dest: '#5B8C72', rest: '#F4B860', place: '#E66A61' }[m.kind];
+  if (m.kind === 'hazard' || m.kind === 'rec') {
+    const c = m.kind === 'rec' ? '#2BB673' : m.color ?? '#EF5350';
+    return (
+      <g {...common}>
+        <path d="M0 4 C-9 -6 -11 -12 -11 -16 A11 11 0 1 1 11 -16 C11 -12 9 -6 0 4Z" fill={c} stroke="#fff" strokeWidth="2.5" style={{ filter: 'drop-shadow(0 2px 3px rgba(0,0,0,.2))' }} />
+        <circle cy="-16" r="4.2" fill="#fff" />
+      </g>
+    );
+  }
+  const color = { start: '#202D42', end: '#4D80E8', dest: '#4D80E8', rest: '#F4B860', place: '#E66A61' }[m.kind];
   return (
     <g {...common}>
       <circle r={m.kind === 'place' ? 6 : 7.5} fill={color} stroke="#fff" strokeWidth="2.5" />

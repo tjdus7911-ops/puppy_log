@@ -104,6 +104,8 @@ export interface AppSettings {
   apiBaseUrl: string; // AI 일기·장소 검색 프록시 서버 주소 (비우면 사용 안 함)
   defaultRestIntervalMinutes: number;
   userName: string;
+  /** 카카오맵 JavaScript 키(도메인 제한 키라 클라이언트 보관 가능). 비우면 개요 지도 */
+  kakaoJsKey: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -114,7 +116,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   apiBaseUrl: '',
   defaultRestIntervalMinutes: 90,
   userName: '',
+  kakaoJsKey: '',
 };
+
+export function mapJsKey(s: AppSettings): string {
+  return (s.kakaoJsKey || (import.meta.env?.VITE_KAKAO_MAP_JS_KEY as string | undefined) || '').trim();
+}
 
 export const PET_SIZE_LABEL: Record<PetSize, string> = {
   small: '소형견',

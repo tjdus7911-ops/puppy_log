@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -15,7 +17,9 @@
         android:name=".MungRoadApp"
         android:label="멍로드"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- usesCleartextTraffic: 개발 중 http://10.0.2.2:8787 프록시 접속용. 배포 시 https 서버로 바꾸고 제거하세요. -->
         <uses-library android:name="android.car" android:required="false" />
         <activity android:name=".ui.MainActivity" android:exported="true">
             <intent-filter>
@@ -26,4 +30,15 @@
             <meta-data android:name="distractionOptimized" android:value="true" />
         </activity>
     </application>
+
+    <queries>
+        <!-- 카카오맵 앱 길 안내 Intent 대상 확인 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="kakaomap" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
 </manifest>

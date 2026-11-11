@@ -1,9 +1,10 @@
 // 멍로드 프록시 서버 (의존성 없음, Node 18+)
 // - POST /api/diary  : 여행 기록 → AI 여행 일기 (Anthropic Messages API)
 // - GET  /api/places : 장소 키워드 검색 (카카오 로컬 API)
+// - GET  /api/traffic: 도로 돌발상황(사고·공사·낙하물 등) — ITS 국가교통정보센터 돌발상황정보 API
 // API 키는 환경 변수에만 둡니다. 클라이언트(웹/앱)에는 이 서버 주소만 설정합니다.
 //
-// 실행: ANTHROPIC_API_KEY=... KAKAO_REST_API_KEY=... node server/index.mjs
+// 실행: ANTHROPIC_API_KEY=... KAKAO_REST_API_KEY=... ITS_API_KEY=... node server/index.mjs
 // ⚠ 외부 API 실제 호출은 개발 환경 네트워크 제한으로 아직 검증하지 못했습니다.
 import { createServer } from 'node:http';
 
@@ -91,12 +92,64 @@ async function places(req, res, url) {
   });
 }
 
+// ITS 돌발상황정보: 요청변수 apiKey, type(all/ex/its/loc/sgg/etc), eventType(all/cor/acc/wea/ete/dis/etc),
+// minX/maxX/minY/maxY(경위도 범위), getType(json/xml). 출력: eventType, eventDetailType, coordX, coordY, roadName,
+// lanesBlockType, lanesBlocked, message, startDate, endDate 등 (its.go.kr 오픈데이터 '돌발상황정보' 명세).
+// 엔드포인트 주소는 인증키 발급 페이지의 예시 URL 로 확인 후 ITS_EVENT_URL 로 바꿀 수 있습니다.
+const ITS_EVENT_URL = process.env.ITS_EVENT_URL ?? 'https://openapi.its.go.kr:9443/eventInfo';
+
+function classify(e) {
+  const text = `${e.eventType ?? ''} ${e.eventDetailType ?? ''} ${e.message ?? ''}`;
+  if (/낙하물/.test(text)) return 'debris';
+  if (/사고/.test(text)) return 'accident';
+  if (/공사|작업/.test(text)) return 'construction';
+  if (/정체|지체|서행/.test(text)) return 'congestion';
+  if (/기상|강설|결빙|안개|강우/.test(text)) return 'weather';
+  return 'other';
+}
+
+async function traffic(req, res, url) {
+  if (!process.env.ITS_API_KEY) return send(res, 503, { error: 'ITS_API_KEY not set' });
+  const q = url.searchParams;
+  const u = new URL(ITS_EVENT_URL);
+  u.searchParams.set('apiKey', process.env.ITS_API_KEY);
+  u.searchParams.set('type', 'all');
+  u.searchParams.set('eventType', 'all');
+  for (const k of ['minX', 'maxX', 'minY', 'maxY']) u.searchParams.set(k, String(Number(q.get(k))));
+  u.searchParams.set('getType', 'json');
+  const r = await fetch(u);
+  if (!r.ok) return send(res, 502, { error: `upstream ${r.status}` });
+  const body = await r.json();
+  // 응답 구조가 버전에 따라 body.items 또는 response.body.items.item 일 수 있어 둘 다 처리
+  const raw = body?.body?.items ?? body?.response?.body?.items?.item ?? body?.response?.body?.items ?? [];
+  const items = Array.isArray(raw) ? raw : [raw];
+  const pick = (o, k) => o[k] ?? o[k.toLowerCase()];
+  return send(res, 200, {
+    source: 'ITS 국가교통정보센터 돌발상황정보',
+    hazards: items
+      .map((e, i) => {
+        const n = { eventType: pick(e, 'eventType'), eventDetailType: pick(e, 'eventDetailType'), message: pick(e, 'message') };
+        return {
+          id: String(pick(e, 'linkId') ?? i) + '-' + String(pick(e, 'startDate') ?? ''),
+          type: classify(n),
+          lat: Number(pick(e, 'coordY')),
+          lng: Number(pick(e, 'coordX')),
+          roadName: pick(e, 'roadName') ?? null,
+          message: n.message ?? n.eventDetailType ?? null,
+          lanes: [pick(e, 'lanesBlockType'), pick(e, 'lanesBlocked')].filter(Boolean).join(' ') || null,
+        };
+      })
+      .filter((h) => Number.isFinite(h.lat) && Number.isFinite(h.lng)),
+  });
+}
+
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
     if (req.method === 'OPTIONS') return send(res, 204, {});
     if (req.method === 'POST' && url.pathname === '/api/diary') return await diary(req, res);
     if (req.method === 'GET' && url.pathname === '/api/places') return await places(req, res, url);
+    if (req.method === 'GET' && url.pathname === '/api/traffic') return await traffic(req, res, url);
     if (url.pathname === '/health') return send(res, 200, { ok: true });
     return send(res, 404, { error: 'not found' });
   } catch (e) {

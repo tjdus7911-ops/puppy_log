@@ -7,7 +7,7 @@ import type { GeoPoint } from '../domain/models';
 import { TripController, type StartKind } from '../trip/TripController';
 import { DEMO_DESTINATION } from '../vehicle/demoRoute';
 import { Hint, Sheet, Switch, TopBar } from '../ui/components';
-import { PetAvatar } from '../ui/Art';
+import { PetAvatar, Scene } from '../ui/Art';
 import { RestIntervalPicker } from './PetForm';
 
 export const DEMO_SPEEDS = [1, 10, 30, 60, 120, 300];
@@ -77,6 +77,13 @@ export default function TripSetup() {
         <div className="demo-ribbon"><FlaskConical size={14} /> 데모 모드 · 실제 차량·위치 대신 가상 주행 데이터를 사용해요</div>
       )}
 
+      <div className="setup-hero">
+        <div>
+          <p className="h-xl">여행 시작하기</p>
+          <p className="t-body mt-8" style={{ color: 'var(--text-2)' }}>{pets.find((p) => p.id === selected[0])?.name ?? '우리 강아지'}와<br />새로운 여행을 시작할까요?</p>
+        </div>
+        <div style={{ width: 170, flex: 'none' }}><Scene kind="drive" height={120} /></div>
+      </div>
       <section className="section" style={{ marginTop: 18 }}>
         <h2 className="h-md">함께 이동할 반려견</h2>
         <div className="row mt-12" style={{ flexWrap: 'wrap', gap: 14 }}>

@@ -38,7 +38,7 @@ export default function Home() {
       </h1>
 
       {pet ? (
-        <div className="card mt-16" style={{ background: 'linear-gradient(135deg, #fff 0%, #FBF6EE 100%)' }}>
+        <div className="card mt-16" style={{ background: 'linear-gradient(135deg, #fff 0%, #F3F8FF 100%)' }}>
           <div className="row" style={{ gap: 14 }}>
             <PetAvatar uri={pet.photoUri} size={64} ring />
             <div className="grow">

@@ -36,16 +36,16 @@ interface PetDao {
 }
 
 @Dao
-interface TripDao {
-    @Query("SELECT * FROM trip WHERE status = 'ENDED' ORDER BY startTime DESC") fun observeEnded(): Flow<List<TripEntity>>
-    @Query("SELECT * FROM trip WHERE status != 'ENDED' LIMIT 1") suspend fun findActive(): TripEntity?
-    @Query("SELECT * FROM trip WHERE id = :id") suspend fun get(id: String): TripEntity?
-    @Upsert suspend fun upsert(trip: TripEntity)
-    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun linkPets(refs: List<TripPetCrossRef>)
+abstract class TripDao {
+    @Query("SELECT * FROM trip WHERE status = 'ENDED' ORDER BY startTime DESC") abstract fun observeEnded(): Flow<List<TripEntity>>
+    @Query("SELECT * FROM trip WHERE status != 'ENDED' LIMIT 1") abstract suspend fun findActive(): TripEntity?
+    @Query("SELECT * FROM trip WHERE id = :id") abstract suspend fun get(id: String): TripEntity?
+    @Upsert abstract suspend fun upsert(trip: TripEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) abstract suspend fun linkPets(refs: List<TripPetCrossRef>)
 
     /** 중복 여행 시작 방지: 진행 중인 여행이 없을 때만 생성 */
     @Transaction
-    suspend fun createIfNoActive(trip: TripEntity, petIds: List<String>): Boolean {
+    open suspend fun createIfNoActive(trip: TripEntity, petIds: List<String>): Boolean {
         if (findActive() != null) return false
         upsert(trip)
         linkPets(petIds.map { TripPetCrossRef(trip.id, it) })
@@ -54,17 +54,17 @@ interface TripDao {
 
     /** 실제 기록만 집계(데모 제외) */
     @Query("SELECT COUNT(*) AS count, SUM(totalDistanceKm) AS totalKm, SUM(drivingDurationSeconds) AS drivingSeconds FROM trip WHERE status = 'ENDED' AND isDemo = 0")
-    fun observeRealStats(): Flow<TripStats>
+    abstract fun observeRealStats(): Flow<TripStats>
 
-    @Insert suspend fun insertLocations(list: List<TripLocationEntity>)
-    @Query("SELECT * FROM trip_location WHERE tripId = :tripId ORDER BY timestamp") suspend fun locations(tripId: String): List<TripLocationEntity>
-    @Upsert suspend fun upsertRest(rest: RestSessionEntity)
-    @Query("SELECT * FROM rest_session WHERE tripId = :tripId ORDER BY startTime") suspend fun rests(tripId: String): List<RestSessionEntity>
-    @Upsert suspend fun upsertPlace(place: VisitedPlaceEntity)
-    @Upsert suspend fun upsertPhoto(photo: TripPhotoEntity)
-    @Query("DELETE FROM trip WHERE id = :id") suspend fun delete(id: String) // 하위 테이블은 CASCADE
-    @Query("DELETE FROM trip WHERE isDemo = 1") suspend fun deleteDemo()
-    @Query("DELETE FROM trip") suspend fun deleteAll()
+    @Insert abstract suspend fun insertLocations(list: List<TripLocationEntity>)
+    @Query("SELECT * FROM trip_location WHERE tripId = :tripId ORDER BY timestamp") abstract suspend fun locations(tripId: String): List<TripLocationEntity>
+    @Upsert abstract suspend fun upsertRest(rest: RestSessionEntity)
+    @Query("SELECT * FROM rest_session WHERE tripId = :tripId ORDER BY startTime") abstract suspend fun rests(tripId: String): List<RestSessionEntity>
+    @Upsert abstract suspend fun upsertPlace(place: VisitedPlaceEntity)
+    @Upsert abstract suspend fun upsertPhoto(photo: TripPhotoEntity)
+    @Query("DELETE FROM trip WHERE id = :id") abstract suspend fun delete(id: String) // 하위 테이블은 CASCADE
+    @Query("DELETE FROM trip WHERE isDemo = 1") abstract suspend fun deleteDemo()
+    @Query("DELETE FROM trip") abstract suspend fun deleteAll()
 }
 
 @Database(

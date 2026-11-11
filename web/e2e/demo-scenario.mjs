@@ -46,17 +46,30 @@ await page.getByText('함께 이동할 반려견').waitFor();
 await click('300배속');
 await full('04-trip-setup');
 await page.getByRole('button', { name: '여행 시작', exact: true }).click();
-await page.getByText('다음 휴식까지').waitFor();
+await page.locator('.stat3').waitFor();
 await page.waitForTimeout(3000);
 await shot('05-live-driving');
 
+step('차량 가로 화면 대시보드(1600×900) + 도로 위험 정보(데모) + 음성 명령(데모)');
+await page.setViewportSize({ width: 1600, height: 900 });
+await page.locator('.rail').waitFor();
+await page.locator('.hazard-bar .badge.sample').waitFor();
+await page.locator('.rec-item').first().waitFor({ timeout: 10000 });
+await page.waitForTimeout(800);
+await shot('05b-dashboard-wide');
+await page.locator('.chips .chip', { hasText: '다음 휴식까지?' }).click();
+const voiceText = await page.locator('.voice-card .t-cap').innerText();
+console.log('  음성 명령(데모 칩):', voiceText);
+await page.setViewportSize({ width: 390, height: 844 });
+await page.waitForTimeout(300);
+
 step('80분 예고 → 90분 휴식 알림 대기');
-await page.getByText('곧 쉬어갈 시간이에요').waitFor({ timeout: 60000 });
+await page.getByRole('heading', { name: /곧 쉬어갈 시간이에요/ }).waitFor({ timeout: 60000 });
 await shot('06-reminder-soon');
 await click('확인');
-await page.getByText('잠깐 쉬어갈까요?').waitFor({ timeout: 60000 });
+await page.getByRole('heading', { name: /잠깐 쉬어갈까요/ }).waitFor({ timeout: 60000 });
 await shot('07-reminder-due');
-await click('주변 휴식 장소 찾기');
+await click('주변 휴식 장소 보기');
 await page.getByRole('heading', { name: '주변 휴식 장소' }).waitFor();
 await page.waitForTimeout(800);
 await shot('08-nearby-rest');
@@ -64,22 +77,24 @@ await page.keyboard.press('Escape');
 
 step('휴식 시작/종료');
 await page.locator('.action', { hasText: '휴식 시작' }).click();
-await page.getByText('휴식 시간').waitFor();
+await page.locator('.stat3 .k', { hasText: '휴식 시간' }).waitFor();
 await page.waitForTimeout(2500);
 await shot('09-resting');
 await page.locator('.action', { hasText: '휴식 종료' }).click();
 await page.waitForTimeout(500);
 
 step('새로고침 후 여행 복원');
-const before = await page.locator('.big-stat').first().innerText();
+const before = await page.locator('.stat3 .v').first().innerText();
 await page.reload();
-await page.getByText('다음 휴식까지').waitFor({ timeout: 15000 });
-const after = await page.locator('.big-stat').first().innerText();
+await page.locator('.stat3').waitFor({ timeout: 15000 });
+const after = await page.locator('.stat3 .v').first().innerText();
 console.log(`  주행 시간 복원: ${before} → ${after}`);
 
 step('목적지 도착까지 대기');
 await page.getByText('목적지 근처에 도착했어요').first().waitFor({ timeout: 120000 });
-await page.locator('.action', { hasText: '여행 기록' }).click();
+await page.getByRole('button', { name: /여행 기록 상태 보기/ }).click();
+const hzOn = await page.locator('.hazard-bar .hz.on').count();
+console.log(`  도로 위험 칩(전방 30km 내) 활성: ${hzOn}개`);
 await full('10-live-arrived');
 
 step('여행 종료');
@@ -95,6 +110,13 @@ await click('여행 일기 만들기');
 await page.getByText('기본 템플릿').waitFor({ timeout: 10000 });
 const diary = await page.locator('.card .t-body').first().innerText();
 console.log('  일기:', diary.replace(/\n+/g, ' / '));
+
+step('정차 중 기록 화면 → AI 여행 일기 화면');
+await page.getByRole('button', { name: /여행 일기 보기/ }).click();
+await page.getByRole('heading', { name: 'AI 여행 일기' }).waitFor();
+await full('11b-diary');
+await page.goBack();
+await page.getByText('여행이 저장됐어요').waitFor();
 
 step('공유 이미지');
 await click('공유 이미지', { exact: true });
@@ -129,7 +151,21 @@ await page.goto(`${BASE}#/my`);
 await page.waitForTimeout(400);
 await full('19-mypage');
 
+step('커뮤니티(예시 게시물)');
+await page.goto(`${BASE}#/community`);
+await page.getByText('예시 게시물').waitFor();
+await full('19b-community');
+
+step('발도장 지도·여행 기록 가로 화면');
+await page.setViewportSize({ width: 1600, height: 900 });
+await page.goto(`${BASE}#/pawmap`);
+await page.getByRole('radio', { name: '데모 기록' }).click();
+await page.waitForTimeout(400);
+await shot('19c-pawmap-wide');
+await page.setViewportSize({ width: 390, height: 844 });
+
 step('위치 권한 거부 → 수동 기록 모드');
+await page.goto(`${BASE}#/my`);
 await page.locator('label.switch:has(input[aria-label="데모 모드"])').click();
 await page.goto(`${BASE}#/trip/setup`);
 await page.getByRole('button', { name: '여행 시작', exact: true }).click();

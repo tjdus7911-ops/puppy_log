@@ -62,16 +62,16 @@ export async function renderShareCard(d: ShareInput): Promise<Blob> {
   await document.fonts?.ready;
   const font = (w: number, s: number) => `${w} ${s}px "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", sans-serif`;
 
-  ctx.fillStyle = '#FAF9F6'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#F7FAFF'; ctx.fillRect(0, 0, W, H);
   // 상단 사진
   const photoSrc = d.coverPhoto ?? d.petPhoto;
   const img = photoSrc ? await loadImg(photoSrc) : null;
   ctx.save(); roundRect(ctx, 60, 60, 960, 760, 48); ctx.clip();
   if (img) cover(ctx, img, 60, 60, 960, 760);
   else {
-    const g = ctx.createLinearGradient(0, 60, 0, 820); g.addColorStop(0, '#F4E9D8'); g.addColorStop(1, '#CFE0D5');
+    const g = ctx.createLinearGradient(0, 60, 0, 820); g.addColorStop(0, '#E8F1FF'); g.addColorStop(1, '#D9E6FC');
     ctx.fillStyle = g; ctx.fillRect(60, 60, 960, 760);
-    paw(ctx, 540, 440, 22, 'rgba(91,140,114,0.55)');
+    paw(ctx, 540, 440, 22, 'rgba(77, 128, 232,0.55)');
   }
   ctx.restore();
   // 반려견 원형 사진(커버와 다를 때)
@@ -83,10 +83,10 @@ export async function renderShareCard(d: ShareInput): Promise<Blob> {
     }
   }
   // 텍스트
-  ctx.fillStyle = '#5B8C72'; roundRect(ctx, 60, 880, 64, 64, 18); ctx.fill(); paw(ctx, 92, 912, 2.6, '#fff');
+  ctx.fillStyle = '#4D80E8'; roundRect(ctx, 60, 880, 64, 64, 18); ctx.fill(); paw(ctx, 92, 912, 2.6, '#fff');
   ctx.fillStyle = '#252B28'; ctx.font = font(800, 34); ctx.fillText('멍로드', 142, 912);
   ctx.fillStyle = '#778079'; ctx.font = font(700, 20); ctx.fillText('MUNG ROAD', 143, 940);
-  if (d.isDemo) { ctx.fillStyle = '#FDF1DC'; roundRect(ctx, 820, 892, 200, 46, 23); ctx.fill(); ctx.fillStyle = '#8A5E12'; ctx.font = font(700, 22); ctx.textAlign = 'center'; ctx.fillText('데모 기록', 920, 923); ctx.textAlign = 'left'; }
+  if (d.isDemo) { ctx.fillStyle = '#FDF1DC'; roundRect(ctx, 820, 892, 200, 46, 23); ctx.fill(); ctx.fillStyle = '#9A6411'; ctx.font = font(700, 22); ctx.textAlign = 'center'; ctx.fillText('데모 기록', 920, 923); ctx.textAlign = 'left'; }
 
   ctx.fillStyle = '#252B28'; ctx.font = font(800, 60);
   const lines = wrap(ctx, d.title, 960, 2);
@@ -100,8 +100,8 @@ export async function renderShareCard(d: ShareInput): Promise<Blob> {
   ctx.font = font(700, 32);
   for (const t of chips) {
     const w = ctx.measureText(t).width + 56;
-    ctx.fillStyle = '#E6EFE9'; roundRect(ctx, x, y + 34, w, 68, 34); ctx.fill();
-    ctx.fillStyle = '#3F6A53'; ctx.fillText(t, x + 28, y + 80);
+    ctx.fillStyle = '#E8F1FF'; roundRect(ctx, x, y + 34, w, 68, 34); ctx.fill();
+    ctx.fillStyle = '#2F5DB8'; ctx.fillText(t, x + 28, y + 80);
     x += w + 16;
   }
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('이미지를 만들지 못했어요.'))), 'image/png'));

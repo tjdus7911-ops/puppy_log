@@ -159,14 +159,14 @@ class DemoVehicleDataProvider(startTime: Long, @Volatile var speedMultiplier: In
 
 /** 웹 web/src/vehicle/demoRoute.ts 와 같은 근사 경로(데모 전용) */
 object DemoRoute {
-    private val pts = listOf(
+    val points: List<Pair<Double, Double>> = listOf(
         37.5665 to 126.978, 37.5172 to 127.0473, 37.4685 to 127.039, 37.4 to 127.1, 37.285 to 127.106,
         37.24 to 127.2, 37.23 to 127.28, 37.25 to 127.46, 37.28 to 127.63, 37.31 to 127.82, 37.38 to 127.92,
         37.46 to 128.12, 37.54 to 128.33, 37.63 to 128.56, 37.68 to 128.72, 37.71 to 128.8, 37.7519 to 128.8761,
         37.7956 to 128.9083,
     )
-    private val cum = pts.runningFoldIndexed(0.0) { i, acc, p ->
-        if (i == 0) 0.0 else acc + com.mungroad.domain.TripEngine.haversineKm(pts[i - 1].first, pts[i - 1].second, p.first, p.second)
+    private val cum: List<Double> = points.indices.runningFold(0.0) { acc, i ->
+        if (i == 0) 0.0 else acc + com.mungroad.domain.TripEngine.haversineKm(points[i - 1].first, points[i - 1].second, points[i].first, points[i].second)
     }.drop(1)
     val totalKm = cum.last()
 
@@ -182,7 +182,7 @@ object DemoRoute {
         var i = 1
         while (i < cum.size - 1 && cum[i] < d) i++
         val t = (d - cum[i - 1]) / (cum[i] - cum[i - 1]).coerceAtLeast(1e-9)
-        val a = pts[i - 1]; val b = pts[i]
+        val a = points[i - 1]; val b = points[i]
         return (a.first + (b.first - a.first) * t) to (a.second + (b.second - a.second) * t)
     }
 }
