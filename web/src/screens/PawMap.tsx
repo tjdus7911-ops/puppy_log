@@ -7,7 +7,7 @@ import { nearestRegion, type Region } from '../domain/regions';
 import { MapView } from '../ui/MapView';
 import { EmptyState, Segmented, TopBar } from '../ui/components';
 import { PawGlyph } from '../ui/Art';
-import { navigate } from '../app/router';
+import { navigate, queryParam, useRoute } from '../app/router';
 import { formatKm } from '../domain/format';
 import { TripCard } from './Album';
 
@@ -29,8 +29,12 @@ export function aggregatePaws(trips: { id: string; endLocation: { latitude: numb
 export default function PawMap() {
   const { trips } = useStore();
   const [places, setPlaces] = useState<VisitedPlace[]>([]);
-  const [source, setSource] = useState<'real' | 'demo'>('real');
+  const route = useRoute();
+  const [source, setSource] = useState<'real' | 'demo'>(queryParam(route, 'src') === 'demo' ? 'demo' : 'real');
   const [sel, setSel] = useState<string | null>(null);
+  // 같은 화면에서 주소(?src=)만 바뀌어도 탭을 맞춤
+  const srcParam = queryParam(route, 'src') === 'demo' ? 'demo' : 'real';
+  useEffect(() => { setSource(srcParam); setSel(null); }, [srcParam]);
   useEffect(() => { repo.allVisitedPlaces().then(setPlaces).catch(() => setPlaces([])); }, []);
 
   const ended = trips.filter((t) => t.status === 'ended' && (source === 'demo' ? t.isDemo : !t.isDemo));
@@ -85,7 +89,10 @@ export default function PawMap() {
           </div>
           {selected ? (
             <div className="mt-16" style={{ display: 'grid', gap: 12 }}>
-              <p className="h-md">{selected.region.province} {selected.region.name}의 여행 {selTrips.length}개</p>
+              <div className="row between">
+                <p className="h-md">{selected.region.province} {selected.region.name}의 여행 {selTrips.length}개</p>
+                <button className="link" onClick={() => navigate(`/album?region=${encodeURIComponent(selected.region.name)}${source === 'demo' ? '&src=demo' : ''}`)}>앨범에서 보기 ›</button>
+              </div>
               {selTrips.map((t) => <TripCard key={t.id} trip={t} compact />)}
             </div>
           ) : (

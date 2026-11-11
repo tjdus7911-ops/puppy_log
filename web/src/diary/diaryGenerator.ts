@@ -46,6 +46,9 @@ export function toPayload(d: DiaryInput) {
     places: d.places.filter((p) => !p.isSample).map((p) => ({ name: p.name, category: p.category })),
     photoCount: d.photoCount,
     memo: d.memo.slice(0, 500),
+    returnLeg: d.returnLeg ? { distanceKm: Math.round(d.returnLeg.distanceKm), drivingMinutes: Math.round(d.returnLeg.drivingSec / 60) } : null,
+    placeNotes: (d.placeNotes ?? []).slice(0, 10),
+    photoNotes: (d.photoNotes ?? []).slice(0, 10),
   };
 }
 

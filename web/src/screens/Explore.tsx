@@ -1,3 +1,4 @@
+import { drivingLocked } from '../trip/driveLock';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Clock, Lock, MapPin, Navigation, Phone, Search, TriangleAlert } from 'lucide-react';
 import { useStore } from '../app/store';
@@ -32,16 +33,17 @@ export default function Explore({ route }: { route: string }) {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const initialCat = queryParam(route, 'cat') as PlaceCategory | null;
   const [cat, setCat] = useState<CatSel>(initialCat && CATS.includes(initialCat) ? initialCat : 'all');
-  const [mode, setMode] = useState<SearchMode>('current');
-  const [regionText, setRegionText] = useState('');
-  const [regionId, setRegionId] = useState<string | null>(null);
+  const initialRegion = REGIONS.find((r) => r.name === queryParam(route, 'region')) ?? null;
+  const [mode, setMode] = useState<SearchMode>(initialRegion ? 'region' : 'current');
+  const [regionText, setRegionText] = useState(initialRegion?.name ?? '');
+  const [regionId, setRegionId] = useState<string | null>(initialRegion?.id ?? null);
   const [filters, setFilters] = useState<PetPolicyKey[]>([]);
   const [center, setCenter] = useState<Center | null>(null);
   const [results, setResults] = useState<{ loading: boolean; error: string | null; places: Place[] }>({ loading: false, error: null, places: [] });
   const [detail, setDetail] = useState<Place | null>(null);
   const [nonce, setNonce] = useState(0);
   const provider = useMemo(() => getPlaceProvider(settings.apiBaseUrl), [settings.apiBaseUrl]);
-  const driving = live.active && live.engine?.status === 'driving';
+  const driving = drivingLocked(live);
 
   useEffect(() => {
     const c = queryParam(route, 'cat') as PlaceCategory | null;

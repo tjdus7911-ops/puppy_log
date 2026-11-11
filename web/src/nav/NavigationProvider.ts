@@ -22,13 +22,14 @@ function nearestIndex(p: GeoPoint) {
   return best;
 }
 
-export function routeSnapshot(opts: { isDemo: boolean; destinationName: string | null; destination: GeoPoint | null; current: GeoPoint | null; drivenKm: number; drivingSec: number }): RouteSnapshot {
+export function routeSnapshot(opts: { isDemo: boolean; direction?: 'outbound' | 'return'; destinationName: string | null; destination: GeoPoint | null; current: GeoPoint | null; drivenKm: number; drivingSec: number }): RouteSnapshot {
   const { isDemo, destinationName, destination, current } = opts;
   if (isDemo) {
-    const i = current ? nearestIndex(current) : 0;
-    const remaining = Math.max(0, DEMO_TOTAL_KM - DEMO_CUM_KM[i]);
+    const back = opts.direction === 'return';
+    const i = current ? nearestIndex(current) : back ? DEMO_ROUTE.length - 1 : 0;
+    const remaining = back ? DEMO_CUM_KM[i] : Math.max(0, DEMO_TOTAL_KM - DEMO_CUM_KM[i]);
     const avg = opts.drivingSec > 1800 ? Math.max(40, opts.drivenKm / (opts.drivingSec / 3600)) : 80;
-    return { destinationName: destinationName ?? '강릉', remainingKm: remaining, remainingKind: 'route', etaMinutes: (remaining / avg) * 60, etaEstimated: true, provenance: 'demo' };
+    return { destinationName: back ? '서울(집)' : destinationName ?? '강릉', remainingKm: remaining, remainingKind: 'route', etaMinutes: (remaining / avg) * 60, etaEstimated: true, provenance: 'demo' };
   }
   if (destination && current) {
     return { destinationName, remainingKm: haversineKm(current, destination), remainingKind: 'straight', etaMinutes: null, etaEstimated: true, provenance: 'app' };

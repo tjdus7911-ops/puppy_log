@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { TripController } from '../trip/TripController';
+import { PHASE_LABEL } from '../domain/models';
 import { ChevronRight, FlaskConical, Footprints } from 'lucide-react';
 import { useStore } from '../app/store';
 import { navigate, queryParam } from '../app/router';
@@ -33,8 +35,11 @@ type Sort = 'recent' | 'old' | 'region';
 
 export default function Album({ route }: { route: string }) {
   const { trips } = useStore();
+  const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const [source, setSource] = useState<'real' | 'demo'>(queryParam(route, 'src') === 'demo' ? 'demo' : 'real');
   const [sort, setSort] = useState<Sort>('recent');
+  const srcParam = queryParam(route, 'src') === 'demo' ? 'demo' : 'real';
+  useEffect(() => setSource(srcParam), [srcParam]);
   const ended = trips.filter((t) => t.status === 'ended');
   const hasDemo = ended.some((t) => t.isDemo);
   const regionFilter = queryParam(route, 'region');
@@ -67,6 +72,19 @@ export default function Album({ route }: { route: string }) {
           <ChevronRight size={20} />
         </div>
       </button>
+
+      {live.active && live.trip && (
+        <button className="card-btn mt-12" style={{ width: '100%' }} onClick={() => navigate(live.driving ? '/trip/live' : '/home')}>
+          <div className="card row" style={{ gap: 12, border: '1.5px solid var(--primary-soft)' }}>
+            <span className="live-dot" />
+            <div className="grow">
+              <p style={{ fontWeight: 700 }}>진행 중인 여행 · {live.phase ? PHASE_LABEL[live.phase] : ''}</p>
+              <p className="t-cap">{live.trip.title || `${live.petNames.join(', ')}와의 여행`} · 완료하면 앨범에 정리돼요</p>
+            </div>
+            <ChevronRight size={18} />
+          </div>
+        </button>
+      )}
 
       {hasDemo && (
         <div className="mt-16">

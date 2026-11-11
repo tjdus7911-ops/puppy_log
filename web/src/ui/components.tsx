@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, type ReactNode } from 'react';
 import { ChevronLeft, CircleAlert, RotateCcw } from 'lucide-react';
 import { Scene } from './Art';
@@ -25,13 +26,15 @@ export function Sheet({ open, onClose, children, center = false, labelledBy }: {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // body 로 포털: 화면 애니메이션(transform)이 만드는 쌓임 맥락 때문에 하단 메뉴가 시트 버튼을 가리지 않도록
+  return createPortal(
     <div className={`overlay ${center ? 'center' : ''}`} onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" aria-labelledby={labelledBy} onClick={(e) => e.stopPropagation()}>
         {!center && <div className="grab" />}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

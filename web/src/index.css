@@ -315,3 +315,22 @@ textarea.input { height: auto; min-height: 96px; padding: 14px 16px; line-height
 .integ .ok { background: #E3F6EE; color: #1F7A5A; }
 .integ .demo { background: var(--accent-soft); color: #9A6411; }
 .integ .off { background: #EEF1F6; color: var(--text-2); }
+.photo-cell { position: relative; }
+.photo-tools { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; padding: 4px; background: linear-gradient(transparent, rgba(0,0,0,.45)); }
+.photo-tools button { width: 26px; height: 26px; border: 0; border-radius: 8px; background: rgba(255,255,255,.88); color: var(--text); display: grid; place-items: center; padding: 0; }
+.photo-tools button:disabled { opacity: .35; }
+.photo-memo { position: absolute; left: 4px; right: 4px; bottom: 36px; font-size: 11px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.dest-grid .tile { min-height: 112px; }
+.dest-grid .tile .t-cap { font-weight: 500; }
+.photo-strip { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.photo-strip img { width: 108px; height: 108px; object-fit: cover; border-radius: 14px; flex: none; }
+.home-hero { border-radius: 26px; overflow: hidden; background: var(--surface); box-shadow: var(--shadow); }
+.reco-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(170px, 1fr); gap: 10px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.reco-card { border: 0; text-align: left; border-radius: 20px; padding: 16px; background: linear-gradient(140deg, #E8F1FF, #F7FAFF); box-shadow: var(--shadow); color: var(--text); }
+.reco-card.mint { background: linear-gradient(140deg, #DDF6ED, #F7FAFF); }
+.check-row { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 8px 4px; font-size: 14.5px; border-radius: 10px; }
+.check-row:hover { background: #F4F8FF; }
+.check-box { width: 22px; height: 22px; border-radius: 7px; border: 2px solid #C9D6EE; display: grid; place-items: center; flex: none; color: #fff; }
+.check-box.on { background: var(--primary); border-color: var(--primary); }
+.reco-pop { position: absolute; left: 14px; right: 14px; bottom: 68px; z-index: 6; background: rgba(255,255,255,.98); border-radius: 22px; padding: 16px; box-shadow: var(--shadow-lg); border: 1px solid var(--line); animation: up .24s ease both; max-width: 560px; margin: 0 auto; }

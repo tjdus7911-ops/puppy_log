@@ -1,8 +1,10 @@
 // SCREEN 07 — 멍친구 커뮤니티 (향후 확장). 기본 UI·데이터 구조만 준비, 실제 운영 기능은 서버와 함께 단계적으로 개발.
-import { useState } from 'react';
+import { drivingLocked } from '../trip/driveLock';
+import { useState, useSyncExternalStore } from 'react';
+import { TripController } from '../trip/TripController';
 import { Heart, MessageCircle, MoreHorizontal, PenLine, ShieldCheck } from 'lucide-react';
 import { examplePosts, POST_KIND_LABEL, type PostKind } from '../domain/community';
-import { Hint, TopBar } from '../ui/components';
+import { EmptyState, Hint, TopBar } from '../ui/components';
 import { DogFace } from '../ui/Art';
 import { useStore } from '../app/store';
 
@@ -17,6 +19,15 @@ function ago(ts: number) {
 
 export default function Community() {
   const { toast } = useStore();
+  const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
+  if (drivingLocked(live)) {
+    return (
+      <div className="screen">
+        <TopBar title="멍친구 커뮤니티" showBack={false} />
+        <EmptyState kind="empty-place" title="주행 중에는 커뮤니티를 쓸 수 없어요" desc="안전을 위해 정차하거나 휴식 중일 때 이용해 주세요." />
+      </div>
+    );
+  }
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('all');
   const [liked, setLiked] = useState<Set<string>>(new Set());
   const posts = examplePosts().filter((p) => tab === 'all' || p.kind === tab);

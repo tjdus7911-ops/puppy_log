@@ -160,3 +160,49 @@ describe('place filters', () => {
     expect(r.unknown.map((p) => p.id)).toEqual(['c']);
   });
 });
+
+import { countRests, planRests } from './plan';
+describe('plan (예상 휴식)', () => {
+  it('3시간 주행 · 90분 간격 → 도착 직전 휴식 제외 시 1회, 포함 시 1회(180분 시점은 도착과 같아 제외)', () => {
+    expect(countRests(180, 90, true)).toEqual([90]);
+    expect(countRests(180, 90, false)).toEqual([90]);
+    expect(countRests(200, 90, false)).toEqual([90, 180]);
+    expect(countRests(200, 90, true)).toEqual([90]);
+  });
+  it('교통 지연을 고려해 범위를 준다', () => {
+    const p = planRests(225, 90, true); // 3시간 추정
+    expect(p.estimated).toBe(true);
+    expect(p.minRests).toBe(1);
+    expect(p.maxRests).toBe(2);
+  });
+});
+
+import { aheadOnRoute, isMealTime, parseYesNo, pickSuggestion, suggestionSentence, type RecoCandidate } from './autoReco';
+describe('autoReco (주행 중 자동 추천)', () => {
+  const route = [{ latitude: 37.0, longitude: 127.0 }, { latitude: 37.0, longitude: 127.1 }, { latitude: 37.0, longitude: 127.2 }, { latitude: 37.0, longitude: 127.3 }];
+  it('경로 앞쪽만 인정하고 이탈 거리를 계산한다', () => {
+    const cur = { latitude: 37.0, longitude: 127.1 };
+    expect(aheadOnRoute(route, cur, { latitude: 37.0, longitude: 127.0 })).toBeNull();
+    const a = aheadOnRoute(route, cur, { latitude: 37.01, longitude: 127.2 })!;
+    expect(a.aheadKm).toBeGreaterThan(8);
+    expect(a.detourKm).toBeLessThan(1.2);
+  });
+  const mk = (id: string, cat: RecoCandidate['category'], ahead: number, detour: number, ok: boolean): RecoCandidate =>
+    ({ id, name: id, category: cat, point: { latitude: 0, longitude: 0 }, petConfirmed: ok, aheadKm: ahead, detourKm: detour });
+  it('카테고리·이탈·반복 정책', () => {
+    const c = [mk('far', 'cafe', 5, 8, true), mk('a', 'cafe', 4, 0.5, false), mk('b', 'cafe', 6, 0.4, true), mk('r', 'restaurant', 2, 0.1, true)];
+    expect(pickSuggestion(c, { trigger: 'rest', enabled: ['cafe'], suggested: new Set() })?.id).toBe('b'); // 확인된 곳 우선, 크게 벗어난 곳 제외
+    expect(pickSuggestion(c, { trigger: 'rest', enabled: ['cafe'], suggested: new Set(['b']) })?.id).toBe('a'); // 반복 금지
+    expect(pickSuggestion(c, { trigger: 'rest', enabled: ['restArea'], suggested: new Set() })).toBeNull(); // 비활성 카테고리
+    expect(pickSuggestion(c, { trigger: 'meal', enabled: ['restaurant', 'cafe'], suggested: new Set() })?.id).toBe('r');
+  });
+  it('문장·짧은 음성 응답·식사 시간', () => {
+    expect(suggestionSentence(mk('x', 'cafe', 2.2, 0.3, true))).toBe('2km 앞에 반려견 동반 카페가 있어요. 들렀다 갈까요?');
+    expect(suggestionSentence(mk('x', 'cafe', 2, 0.3, false))).toContain('확인이 필요해요');
+    expect(parseYesNo('응')).toBe('yes');
+    expect(parseYesNo('괜찮아')).toBe('no');
+    expect(parseYesNo('날씨 어때')).toBeNull();
+    expect(isMealTime(new Date(2026, 10, 11, 12, 0).getTime())).toBe(true);
+    expect(isMealTime(new Date(2026, 10, 11, 15, 0).getTime())).toBe(false);
+  });
+});

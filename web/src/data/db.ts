@@ -3,7 +3,12 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import {
   DEFAULT_SETTINGS,
+  normalizePhoto,
+  normalizeTrip,
   type AppSettings,
+  type DriveLeg,
+  type LegKind,
+  type TripPhase,
   type Pet,
   type RestSession,
   type Trip,
@@ -13,12 +18,17 @@ import {
   type VisitedPlace,
 } from '../domain/models';
 
+/** 진행 중인 여행의 복원 정보. leg 가 null 이면 주행하지 않는 단계(여행지 활동 중) */
 export interface ActiveTripSnapshot {
   tripId: string;
-  providerKind: 'demo' | 'device-location' | 'manual';
+  phase?: TripPhase; // v1 스냅샷에는 없음 → outbound 로 간주
+  leg?: { id: string; kind: LegKind } | null;
+  providerKind: 'demo' | 'device-location' | 'manual' | null;
   engine: unknown;
   provider: unknown;
   openRestId: string | null;
+  lastPosition?: { latitude: number; longitude: number } | null;
+  meta?: unknown;
   savedAt: number;
 }
 
@@ -30,11 +40,12 @@ interface MungRoadDB extends DBSchema {
   restSessions: { key: string; value: RestSession; indexes: { byTrip: string } };
   visitedPlaces: { key: string; value: VisitedPlace; indexes: { byTrip: string } };
   tripPhotos: { key: string; value: TripPhoto; indexes: { byTrip: string } };
+  driveLegs: { key: string; value: DriveLeg; indexes: { byTrip: string } };
   kv: { key: string; value: unknown };
 }
 
 export const DB_NAME = 'mungroad';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export class StorageError extends Error {}
 
@@ -74,7 +85,7 @@ async function openWithFallback() {
 function open() {
   {
     return openDB<MungRoadDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion) {
+      upgrade(db, oldVersion, _newVersion, transaction) {
         if (oldVersion < 1) {
           db.createObjectStore('pets', { keyPath: 'id' });
           const trips = db.createObjectStore('trips', { keyPath: 'id' });
@@ -87,7 +98,11 @@ function open() {
           }
           db.createObjectStore('kv');
         }
-        // if (oldVersion < 2) { ... 다음 마이그레이션 ... }
+        if (oldVersion < 2) {
+          // v2: 여행 세션(phase)과 주행 구간(driveLegs) 분리, 사진 순서·메모
+          db.createObjectStore('driveLegs', { keyPath: 'id' }).createIndex('byTrip', 'tripId');
+          if (oldVersion >= 1) void migrateV1toV2(transaction as never);
+        }
       },
     }).catch((e) => {
       dbPromise = null;
@@ -102,6 +117,37 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   } catch (e) {
     if (e instanceof StorageError) throw e;
     throw new StorageError(`데이터 저장에 실패했어요 (${(e as Error).name})`);
+  }
+}
+
+/**
+ * v1 → v2: 기존 여행은 phase 를 채우고, 완료된 여행마다 '가는 길' 구간 1개를 만들어 합계를 보존합니다.
+ * 기존 값은 지우거나 바꾸지 않습니다(빠진 필드만 추가).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function migrateV1toV2(tx: any) {
+  const trips = tx.objectStore('trips');
+  const legs = tx.objectStore('driveLegs');
+  let cursor = await trips.openCursor();
+  while (cursor) {
+    const old = cursor.value as Trip;
+    const t = normalizeTrip(old);
+    await cursor.update(t);
+    if (old.status === 'ended') {
+      const leg: DriveLeg = {
+        id: `migrated-${old.id}`, tripId: old.id, kind: 'outbound', startTime: old.startTime, endTime: old.endTime,
+        distanceKm: old.totalDistanceKm, drivingDurationSeconds: old.drivingDurationSeconds, elapsedDurationSeconds: old.elapsedDurationSeconds,
+        restCount: 0, restDurationSeconds: 0, startLocation: old.startLocation, endLocation: old.endLocation, source: old.source, isDemo: old.isDemo,
+      };
+      await legs.put(leg);
+    }
+    cursor = await cursor.continue();
+  }
+  const photos = tx.objectStore('tripPhotos');
+  let pc = await photos.openCursor();
+  while (pc) {
+    await pc.update(normalizePhoto(pc.value as TripPhoto));
+    pc = await pc.continue();
   }
 }
 
@@ -131,13 +177,13 @@ export const repo = {
   },
 
   async listTrips(): Promise<Trip[]> {
-    return guard(async () => (await (await getDb()).getAll('trips')).sort((a, b) => b.startTime - a.startTime));
+    return guard(async () => (await (await getDb()).getAll('trips')).map(normalizeTrip).sort((a, b) => b.startTime - a.startTime));
   },
   async getTrip(id: string) {
-    return guard(async () => (await getDb()).get('trips', id));
+    return guard(async () => { const t = await (await getDb()).get('trips', id); return t ? normalizeTrip(t) : undefined; });
   },
   async saveTrip(t: Trip) {
-    return guard(async () => void (await (await getDb()).put('trips', t)));
+    return guard(async () => void (await (await getDb()).put('trips', { ...t, updatedAt: Date.now() })));
   },
   async createTrip(t: Trip, petIds: string[]) {
     return guard(async () => {
@@ -198,14 +244,42 @@ export const repo = {
   },
   async photosOf(tripId: string) {
     return guard(async () =>
-      (await (await getDb()).getAllFromIndex('tripPhotos', 'byTrip', tripId)).sort((a, b) => a.createdAt - b.createdAt),
+      (await (await getDb()).getAllFromIndex('tripPhotos', 'byTrip', tripId)).map(normalizePhoto).sort((a, b) => a.order - b.order || a.createdAt - b.createdAt),
+    );
+  },
+  async updatePhoto(p: TripPhoto) {
+    return guard(async () => void (await (await getDb()).put('tripPhotos', p)));
+  },
+  /** 사진 순서 저장: ids 순서대로 order 를 0..n-1 로 다시 매깁니다(다른 필드는 유지) */
+  async reorderPhotos(tripId: string, ids: string[]) {
+    return guard(async () => {
+      const tx = (await getDb()).transaction('tripPhotos', 'readwrite');
+      const all = (await tx.store.index('byTrip').getAll(tripId)).map(normalizePhoto);
+      for (const p of all) {
+        const i = ids.indexOf(p.id);
+        if (i >= 0) await tx.store.put({ ...p, order: i });
+      }
+      await tx.done;
+    });
+  },
+  async nextPhotoOrder(tripId: string) {
+    const list = await this.photosOf(tripId);
+    return list.length ? Math.max(...list.map((p) => p.order)) + 1 : 0;
+  },
+
+  async saveLeg(l: DriveLeg) {
+    return guard(async () => void (await (await getDb()).put('driveLegs', l)));
+  },
+  async legsOf(tripId: string) {
+    return guard(async () =>
+      (await (await getDb()).getAllFromIndex('driveLegs', 'byTrip', tripId)).sort((a, b) => a.startTime - b.startTime),
     );
   },
 
   async deleteTrip(tripId: string) {
     return guard(async () => {
       const db = await getDb();
-      const stores = ['trips', 'tripPets', 'tripLocations', 'restSessions', 'visitedPlaces', 'tripPhotos'] as const;
+      const stores = ['trips', 'tripPets', 'tripLocations', 'restSessions', 'visitedPlaces', 'tripPhotos', 'driveLegs'] as const;
       const tx = db.transaction([...stores], 'readwrite');
       await tx.objectStore('trips').delete(tripId);
       for (const s of stores.slice(1)) {
@@ -233,7 +307,7 @@ export const repo = {
   async wipe(opts: { includePets: boolean }) {
     return guard(async () => {
       const db = await getDb();
-      const stores = ['trips', 'tripPets', 'tripLocations', 'restSessions', 'visitedPlaces', 'tripPhotos'] as const;
+      const stores = ['trips', 'tripPets', 'tripLocations', 'restSessions', 'visitedPlaces', 'tripPhotos', 'driveLegs'] as const;
       for (const s of stores) await db.clear(s);
       await db.delete('kv', 'activeTrip');
       if (opts.includePets) {

@@ -62,3 +62,61 @@ export const DEMO_BAD_FIXES: { atKm: number; kind: 'jump' | 'inaccurate' | 'zero
   { atKm: 95, kind: 'inaccurate' },
   { atKm: 150, kind: 'zero' },
 ];
+
+/** 복귀 데모 경로(강릉 → 서울): 같은 경로를 역방향으로 */
+export const DEMO_RETURN_ROUTE: GeoPoint[] = [...DEMO_ROUTE].reverse();
+export const DEMO_HOME = { name: '서울(집)', point: DEMO_ROUTE[0] };
+
+// ── v2: 데모 경로 정의(가는 길 · 돌아오는 길 · 여행지 내 추가 이동) ──
+export type DemoRouteKey = 'outbound' | 'return' | 'local';
+
+export interface DemoRouteDef {
+  key: DemoRouteKey;
+  totalKm: number;
+  pointAt(km: number): GeoPoint;
+  speedAt(km: number): number;
+  stops: { atKm: number; seconds: number; label: string }[];
+  badFixes: { atKm: number; kind: 'jump' | 'inaccurate' | 'zero' }[];
+  points: GeoPoint[];
+}
+
+function polyline(points: GeoPoint[]) {
+  const cum = points.reduce<number[]>((acc, p, i) => {
+    acc.push(i === 0 ? 0 : acc[i - 1] + haversineKm(points[i - 1], p));
+    return acc;
+  }, []);
+  const total = cum[cum.length - 1];
+  const at = (km: number): GeoPoint => {
+    const d = Math.max(0, Math.min(total, km));
+    let i = 1;
+    while (i < cum.length - 1 && cum[i] < d) i++;
+    const a = points[i - 1];
+    const b = points[i];
+    const t = (d - cum[i - 1]) / (cum[i] - cum[i - 1] || 1);
+    return { latitude: a.latitude + (b.latitude - a.latitude) * t, longitude: a.longitude + (b.longitude - a.longitude) * t };
+  };
+  return { total, at };
+}
+
+/** 강릉 경포해변 → 안목 커피거리 부근(여행지 내 짧은 이동, 데모 전용 근사 좌표) */
+export const DEMO_LOCAL_ROUTE: GeoPoint[] = [
+  { latitude: 37.7956, longitude: 128.9083 }, { latitude: 37.788, longitude: 128.92 },
+  { latitude: 37.78, longitude: 128.933 }, { latitude: 37.772, longitude: 128.947 },
+];
+const LOCAL = polyline(DEMO_LOCAL_ROUTE);
+
+export const DEMO_ROUTES: Record<DemoRouteKey, DemoRouteDef> = {
+  outbound: {
+    key: 'outbound', totalKm: DEMO_TOTAL_KM, pointAt: pointAtKm, speedAt: targetSpeedAt,
+    stops: DEMO_SHORT_STOPS, badFixes: DEMO_BAD_FIXES, points: DEMO_ROUTE,
+  },
+  return: {
+    key: 'return', totalKm: DEMO_TOTAL_KM, pointAt: (km) => pointAtKm(DEMO_TOTAL_KM - km), speedAt: (km) => targetSpeedAt(DEMO_TOTAL_KM - km),
+    stops: DEMO_SHORT_STOPS.map((x) => ({ ...x, atKm: DEMO_TOTAL_KM - x.atKm })).sort((a, b) => a.atKm - b.atKm),
+    badFixes: [], points: [...DEMO_ROUTE].reverse(),
+  },
+  local: {
+    key: 'local', totalKm: LOCAL.total, pointAt: LOCAL.at, speedAt: () => 32,
+    stops: [{ atKm: 1.6, seconds: 40, label: '신호 대기' }], badFixes: [], points: DEMO_LOCAL_ROUTE,
+  },
+};

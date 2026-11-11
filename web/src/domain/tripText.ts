@@ -54,6 +54,11 @@ export interface DiaryInput {
   places: { name: string; category: PlaceCategory; isSample: boolean }[];
   photoCount: number;
   memo: string;
+  /** v2: 돌아오는 길을 기록했는지와 그 거리 */
+  returnLeg?: { distanceKm: number; drivingSec: number } | null;
+  /** v2: 사용자가 직접 쓴 장소 메모·사진 메모(사실 그대로 인용) */
+  placeNotes?: { name: string; memo: string }[];
+  photoNotes?: string[];
 }
 
 export function templateDiary(d: DiaryInput): string {
@@ -78,11 +83,19 @@ export function templateDiary(d: DiaryInput): string {
 
   const real = d.places.filter((p) => !p.isSample);
   if (real.length > 0) {
-    const list = real.slice(0, 3).map((p) => `${p.name}(${CATEGORY_LABEL[p.category]})`).join(', ');
-    lines.push(`가는 길에 ${list}에 들렀다.`);
+    const list = real.slice(0, 4).map((p) => `${p.name}(${CATEGORY_LABEL[p.category]})`).join(', ');
+    lines.push(`이번 여행에서 ${list}에 들렀다.`);
   }
-  if (d.photoCount > 0) lines.push(`오늘 남긴 사진은 ${d.photoCount}장이다.`);
-  if (d.memo.trim()) lines.push(`메모: ${d.memo.trim()}`);
+  const notes = (d.placeNotes ?? []).filter((n) => n.memo.trim());
+  if (notes.length) lines.push(notes.slice(0, 3).map((n) => `${n.name}에서 남긴 메모: “${n.memo.trim()}”`).join('\n'));
+  if (d.photoCount > 0) lines.push(`함께 남긴 사진은 ${d.photoCount}장이다.`);
+  const pn = (d.photoNotes ?? []).filter((x) => x.trim());
+  if (pn.length) lines.push(`사진에 적어 둔 말: ${pn.slice(0, 3).map((x) => `“${x.trim()}”`).join(', ')}`);
+  if (d.memo.trim()) lines.push(`여행 메모: ${d.memo.trim()}`);
+  if (d.returnLeg) {
+    const rd = d.returnLeg.distanceKm >= 1 ? `${Math.round(d.returnLeg.distanceKm)}km` : `${Math.round(d.returnLeg.distanceKm * 1000)}m`;
+    lines.push(`돌아오는 길도 ${rd}를 기록하며 집까지 함께 왔다.`);
+  }
   lines.push(`${withJosa} 함께한 오늘의 길도 오래 기억하고 싶은 하루로 남겨 둔다.`);
   return lines.join('\n\n');
 }

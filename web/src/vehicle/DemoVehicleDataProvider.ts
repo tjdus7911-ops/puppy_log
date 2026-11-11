@@ -1,6 +1,6 @@
 import type { VehicleSample } from '../domain/tripEngine';
 import type { ProviderStartResult, VehicleDataProvider } from './VehicleDataProvider';
-import { DEMO_BAD_FIXES, DEMO_SHORT_STOPS, DEMO_TOTAL_KM, pointAtKm, targetSpeedAt } from './demoRoute';
+import { DEMO_ROUTES, type DemoRouteKey } from './demoRoute';
 
 export interface DemoSnapshot {
   simTime: number;
@@ -10,6 +10,8 @@ export interface DemoSnapshot {
   badIdx: number;
   resting: boolean;
   speed: number;
+  /** v2: outbound = 서울→강릉, return = 강릉→서울(역방향), local = 여행지 내 추가 이동 */
+  direction?: DemoRouteKey;
 }
 
 const TICK_MS = 250;
@@ -33,7 +35,7 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
   public onArrive: (() => void) | null = null;
   private arrived = false;
 
-  constructor(startTime: number, speedMultiplier: number, restore?: DemoSnapshot) {
+  constructor(startTime: number, speedMultiplier: number, restore?: DemoSnapshot, direction: DemoRouteKey = 'outbound') {
     this.st = restore ?? {
       simTime: startTime,
       km: 0,
@@ -42,8 +44,18 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
       badIdx: 0,
       resting: false,
       speed: speedMultiplier,
+      direction,
     };
     this.st.speed = speedMultiplier;
+    this.st.direction = this.st.direction ?? 'outbound';
+  }
+
+  get direction(): DemoRouteKey {
+    return this.st.direction ?? 'outbound';
+  }
+
+  private get route() {
+    return DEMO_ROUTES[this.direction];
   }
 
   now() {
@@ -51,7 +63,7 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
   }
 
   get progress() {
-    return this.st.km / DEMO_TOTAL_KM;
+    return this.st.km / this.route.totalKm;
   }
 
   setSpeedMultiplier(mult: number) {
@@ -111,19 +123,19 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
       this.currentSpeed = 0;
       return;
     }
-    const stop = DEMO_SHORT_STOPS[this.st.stopIdx];
+    const stop = this.route.stops[this.st.stopIdx];
     if (stop && this.st.km >= stop.atKm) {
       this.st.stopIdx += 1;
       this.st.stopLeftSec = stop.seconds;
       this.currentSpeed = 0;
       return;
     }
-    const target = targetSpeedAt(this.st.km);
+    const target = this.route.speedAt(this.st.km);
     // 부드러운 가감속
     this.currentSpeed += Math.sign(target - this.currentSpeed) * Math.min(Math.abs(target - this.currentSpeed), 6 * h);
     this.st.km += (this.currentSpeed / 3600) * h;
-    if (this.st.km >= DEMO_TOTAL_KM) {
-      this.st.km = DEMO_TOTAL_KM;
+    if (this.st.km >= this.route.totalKm) {
+      this.st.km = this.route.totalKm;
       this.arrived = true;
       this.currentSpeed = 0;
       this.emit();
@@ -133,11 +145,11 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
 
   private emit() {
     if (!this.onSample) return;
-    const p = pointAtKm(this.st.km);
+    const p = this.route.pointAt(this.st.km);
     let lat = p.latitude + (Math.random() - 0.5) * 0.00008;
     let lon = p.longitude + (Math.random() - 0.5) * 0.00008;
     let accuracy = 6 + Math.random() * 6;
-    const bad = DEMO_BAD_FIXES[this.st.badIdx];
+    const bad = this.route.badFixes[this.st.badIdx];
     if (bad && this.st.km >= bad.atKm) {
       this.st.badIdx += 1;
       if (bad.kind === 'jump') { lat += 0.25; lon -= 0.3; }

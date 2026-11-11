@@ -40,7 +40,7 @@ const TABS = [
 
 function goTab(key: (typeof TABS)[number]['key']) {
   if (key === 'home') navigate('/home');
-  else if (key === 'move') navigate(TripController.isActive ? '/trip/live' : '/trip/setup');
+  else if (key === 'move') navigate(!TripController.isActive ? '/trip/setup' : TripController.phase === 'at-destination' ? '/home' : '/trip/live');
   else if (key === 'record') navigate('/album');
   else if (key === 'community') navigate('/community');
   else navigate('/my');
@@ -146,12 +146,15 @@ function Shell() {
   const inFlow = path === '/onboarding' || path.startsWith('/pet/');
   const showNav = !inFlow;
   const activeTab = TABS.find((t) => t.match.some((m) => path === m || path.startsWith(`${m}/`)))?.key;
-  const fullBleed = path === '/trip/live';
+  const fullBleed = path === '/trip/live' || (path === '/home' && live.active && live.driving);
 
-  const pill = showNav && live.active && path !== '/trip/live' && (
-    <button className="live-pill" onClick={() => navigate('/trip/live')}>
+  const onHomeLive = path === '/home' && live.active;
+  const pill = showNav && live.active && path !== '/trip/live' && !onHomeLive && (
+    <button className="live-pill" onClick={() => navigate(live.driving ? '/trip/live' : '/home')}>
       <span className="live-dot" />
-      여행 기록 중 · <span className="num">{formatClock(live.engine?.elapsedSec ?? 0)}</span>
+      {live.driving
+        ? <>{live.legKind === 'return' ? '돌아가는 길 기록 중' : '여행 기록 중'} · <span className="num">{formatClock(live.engine?.elapsedSec ?? 0)}</span></>
+        : '여행지 활동 중 · 기록 이어가기'}
     </button>
   );
   const storageWarn = storageMode === 'memory' && (
@@ -190,7 +193,7 @@ function Shell() {
       {storageWarn}
       {screen}
       {pill}
-      {['/home', '/explore', '/album', '/pawmap', '/community', '/my'].includes(path) && (
+      {['/home', '/explore', '/album', '/pawmap', '/community', '/my'].includes(path) && !(path === '/home' && live.driving) && (
         <nav className="bottom-nav" aria-label="하단 메뉴">
           {TABS.map((t) => {
             const on = activeTab === t.key;

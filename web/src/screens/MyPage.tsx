@@ -4,7 +4,7 @@ import { realStats, useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { repo } from '../data/db';
 import { formatDuration, formatKm, ageFrom } from '../domain/format';
-import { mapJsKey, PET_SIZE_LABEL } from '../domain/models';
+import { CATEGORY_LABEL, mapJsKey, PET_SIZE_LABEL, type PlaceCategory } from '../domain/models';
 import { storageMode } from '../data/db';
 import { speechRecognitionSupported } from '../trip/voice';
 import { TripController } from '../trip/TripController';
@@ -116,6 +116,20 @@ export default function MyPage() {
             <RestIntervalPicker value={settings.defaultRestIntervalMinutes} onChange={(v) => updateSettings({ defaultRestIntervalMinutes: v })} />
             <p className="t-cap mt-8">반려견별 간격은 각 프로필에서 바꿀 수 있어요. 의학적 기준이 아닌 보호자 설정값이에요.</p>
           </div>
+          <div className="row-item" style={{ display: 'block' }}>
+            <div className="row">
+              <div className="grow"><p style={{ fontWeight: 650 }}>주행 중 장소 자동 추천</p><p className="t-cap">휴식 알림·식사 시간·음성 요청 때 경로 앞쪽 한 곳만 추천해요</p></div>
+              <Switch checked={settings.autoRecommend} onChange={(v) => updateSettings({ autoRecommend: v })} label="주행 중 장소 자동 추천" />
+            </div>
+            {settings.autoRecommend && (
+              <div className="chips mt-12">
+                {(['restArea', 'cafe', 'park', 'restaurant'] as PlaceCategory[]).map((c) => {
+                  const on = settings.autoRecoCategories.includes(c);
+                  return <button key={c} className={`chip ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => updateSettings({ autoRecoCategories: on ? settings.autoRecoCategories.filter((x) => x !== c) : [...settings.autoRecoCategories, c] })}>{CATEGORY_LABEL[c]}</button>;
+                })}
+              </div>
+            )}
+          </div>
           <div className="row-item">
             <Volume2 size={20} color="var(--text-2)" />
             <div className="grow"><p style={{ fontWeight: 650 }}>음성 안내</p><p className="t-cap">휴식 알림 등을 소리로 알려드려요</p></div>
@@ -224,7 +238,12 @@ function integrations(api: string, jsKey: string): Integ[] {
     ['주변 반려견 동반 장소', server ? '서버 연동(카카오)' : '샘플 데이터', server ? 'ok' : 'demo'],
     ['도로 위험 정보(사고·공사 등)', server ? '서버 연동(ITS) · 데모 여행은 데모' : '데모 여행에서만 데모', server ? 'ok' : 'demo'],
     ['AI 여행 일기', server ? '서버 연동(AI)' : '기록 기반 템플릿', server ? 'ok' : 'demo'],
+    ['주행 중 장소 자동 추천', server ? '서버 장소 데이터(동반 여부 확인 필요)' : '샘플 데이터', server ? 'ok' : 'demo'],
+    ['내비 목적지 전달', '웹: 카카오맵 링크 · 차량: NaviHelper 연동 예정', 'off'],
+    ['차량 내비 목적지 → 기록 시작 제안', '데모 안내만 · 차량 연동 예정', 'demo'],
+    ['내비 경로 옵션·분할 화면', '미지원 · 차량 확인 필요', 'off'],
     ['음성 명령', speechRecognitionSupported() ? '브라우저 인식 + 데모 명령' : '데모 명령', speechRecognitionSupported() ? 'ok' : 'demo'],
     ['커뮤니티', '예시 게시물(준비 중)', 'demo'],
+    ['차량 앱 ↔ 모바일 앱 여행 동기화', '향후 개발 · 서버 미구현(이 기기에만 저장)', 'off'],
   ];
 }

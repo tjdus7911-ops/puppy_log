@@ -18,6 +18,45 @@ export interface Pet {
 
 export type TripStatus = 'driving' | 'stopped' | 'resting' | 'ended';
 
+/**
+ * 전체 여행 세션의 단계. 주행(DriveLeg)과 분리되어 있습니다.
+ * planning(여행 준비) → outbound(이동 중) → at-destination(목적지 도착·여행지 활동)
+ *   → returning(복귀 이동 중) → completed(여행 완료)
+ * 목적지 도착은 여행 종료가 아닙니다. 여행지에서 바로 마무리하면 returning 을 건너뜁니다.
+ */
+export type TripPhase = 'planning' | 'outbound' | 'at-destination' | 'returning' | 'completed';
+
+export const PHASE_LABEL: Record<TripPhase, string> = {
+  planning: '여행 준비',
+  outbound: '이동 중',
+  'at-destination': '여행지 활동 중',
+  returning: '복귀 이동 중',
+  completed: '여행 완료',
+};
+
+/** outbound = 가는 길, extra = 여행지 내 추가 이동(여러 번 가능), return = 돌아오는 길 */
+export type LegKind = 'outbound' | 'extra' | 'return';
+
+/** 차량 주행 기록 1구간(가는 길 / 돌아오는 길). 여행 세션 합계는 구간 합으로 계산합니다. */
+export interface DriveLeg {
+  id: string;
+  tripId: string;
+  kind: LegKind;
+  startTime: number;
+  endTime: number | null;
+  distanceKm: number;
+  drivingDurationSeconds: number;
+  elapsedDurationSeconds: number;
+  restCount: number;
+  restDurationSeconds: number;
+  startLocation: NamedLocation | null;
+  endLocation: NamedLocation | null;
+  source: DataSource;
+  isDemo: boolean;
+}
+
+export const LEG_LABEL: Record<LegKind, string> = { outbound: '가는 길', extra: '여행지 내 이동', return: '돌아오는 길' };
+
 /** 기록의 출처. 데모 기록은 실제 통계에 절대 섞이지 않습니다. */
 export type DataSource = 'demo' | 'device-location' | 'manual' | 'pleos-vehicle';
 
@@ -51,6 +90,13 @@ export interface Trip {
   coverPhotoUri: string | null;
   source: DataSource;
   isDemo: boolean;
+  /** v2: 여행 단계 (기존 기록은 마이그레이션으로 채움) */
+  phase: TripPhase;
+  arrivedAt: number | null;
+  returnStartedAt: number | null;
+  /** 차량 앱 ↔ 모바일 앱 동기화 대비 필드. 동기화 서버가 없으므로 항상 'local-only' */
+  updatedAt: number;
+  syncState: 'local-only';
 }
 
 export interface TripPet {
@@ -65,6 +111,7 @@ export interface TripLocation {
   longitude: number;
   timestamp: number;
   accuracy: number | null;
+  legId?: string | null;
 }
 
 export interface RestSession {
@@ -74,6 +121,7 @@ export interface RestSession {
   endTime: number | null;
   latitude: number | null;
   longitude: number | null;
+  legId?: string | null;
 }
 
 export type PlaceCategory = 'restaurant' | 'cafe' | 'park' | 'restArea' | 'lodging' | 'vet';
@@ -87,6 +135,9 @@ export interface VisitedPlace {
   longitude: number;
   visitedAt: number;
   isSample: boolean;
+  /** 'search' = 검색 결과에서 '들렀어요', 'user' = 여행지에서 직접 기록 */
+  source?: 'search' | 'user';
+  memo?: string;
 }
 
 export interface TripPhoto {
@@ -94,6 +145,9 @@ export interface TripPhoto {
   tripId: string;
   photoUri: string;
   createdAt: number;
+  /** v2: 앨범 표시 순서와 사진별 메모 */
+  order: number;
+  memo: string;
 }
 
 export interface AppSettings {
@@ -106,6 +160,13 @@ export interface AppSettings {
   userName: string;
   /** 카카오맵 JavaScript 키(도메인 제한 키라 클라이언트 보관 가능). 비우면 개요 지도 */
   kakaoJsKey: string;
+  /** 출발 전 안전 체크에서 확인한 항목 id (새 여행을 시작하면 비움) */
+  safetyChecks: string[];
+  /** 주행 중 반려견 동반 장소 자동 추천 */
+  autoRecommend: boolean;
+  autoRecoCategories: PlaceCategory[];
+  /** 예상 휴식 계산 시 도착 직전(20분 이내) 휴식은 세지 않음 */
+  skipRestNearArrival: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -117,6 +178,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultRestIntervalMinutes: 90,
   userName: '',
   kakaoJsKey: '',
+  safetyChecks: [],
+  autoRecommend: true,
+  autoRecoCategories: ['restArea', 'cafe', 'park', 'restaurant'],
+  skipRestNearArrival: true,
 };
 
 export function mapJsKey(s: AppSettings): string {
@@ -148,4 +213,22 @@ export const SOURCE_LABEL: Record<DataSource, string> = {
 export function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** 저장된 여행(구버전 포함)을 v2 형태로 맞춥니다. 빠진 필드만 채우고 기존 값은 바꾸지 않습니다. */
+export function normalizeTrip(t: Trip): Trip {
+  const anyT = t as Partial<Trip> & Trip;
+  return {
+    ...t,
+    phase: anyT.phase ?? (t.status === 'ended' ? 'completed' : 'outbound'),
+    arrivedAt: anyT.arrivedAt ?? (t.status === 'ended' ? t.endTime : null),
+    returnStartedAt: anyT.returnStartedAt ?? null,
+    updatedAt: anyT.updatedAt ?? t.endTime ?? t.startTime,
+    syncState: 'local-only',
+  };
+}
+
+export function normalizePhoto(p: TripPhoto): TripPhoto {
+  const a = p as Partial<TripPhoto> & TripPhoto;
+  return { ...p, order: a.order ?? p.createdAt, memo: a.memo ?? '' };
 }

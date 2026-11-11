@@ -1,13 +1,14 @@
 // SCREEN 05 — AI 여행 일기 (대표 사진 · 제목 · 날짜 · 일기 · 수정 · 사진 추가 · 저장)
+import { drivingLocked } from '../trip/driveLock';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { ImagePlus, Lock, Pencil, Save, Sparkles } from 'lucide-react';
 import { useStore } from '../app/store';
-import { fileToDataUrl, pickImages } from '../app/image';
+import { addPhotosToTrip } from '../app/photos';
 import { repo } from '../data/db';
-import { newId, type Trip, type TripPhoto } from '../domain/models';
+import type { Trip, TripPhoto } from '../domain/models';
 import { formatKoreanDate } from '../domain/format';
-import { regionShort } from '../domain/regions';
 import { generateDiary } from '../diary/diaryGenerator';
+import { buildDiaryInput } from '../diary/buildInput';
 import { TripController } from '../trip/TripController';
 import { ErrorState, Hint, Loading, TopBar } from '../ui/components';
 import { Scene } from '../ui/Art';
@@ -15,7 +16,7 @@ import { Scene } from '../ui/Art';
 export default function DiaryScreen({ id, onChanged }: { id: string; onChanged: () => Promise<void> }) {
   const { petsOfTrip, settings, toast } = useStore();
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
-  const driving = live.active && live.engine?.status === 'driving';
+  const driving = drivingLocked(live);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [photos, setPhotos] = useState<TripPhoto[]>([]);
   const [idx, setIdx] = useState(0);
@@ -44,29 +45,17 @@ export default function DiaryScreen({ id, onChanged }: { id: string; onChanged: 
 
   const generate = async () => {
     setBusy(true);
-    const [rests, places] = await Promise.all([repo.restsOf(id), repo.placesOf(id)]);
     const names = petsOfTrip(id).map((p) => p.name);
-    const r = await generateDiary({
-      petNames: names.length ? names : ['우리 강아지'], startTime: trip.startTime,
-      startRegion: trip.startLocation ? regionShort(trip.startLocation) : null,
-      endRegion: trip.endLocation ? regionShort(trip.endLocation) : trip.destinationName,
-      distanceKm: trip.totalDistanceKm, drivingSec: trip.drivingDurationSeconds, elapsedSec: trip.elapsedDurationSeconds,
-      restCount: rests.filter((x) => x.endTime).length, places: places.map((p) => ({ name: p.placeName, category: p.category, isSample: p.isSample })),
-      photoCount: photos.length, memo: trip.memo,
-    }, settings.apiBaseUrl).catch(() => null);
+    const r = await generateDiary(await buildDiaryInput(trip, names), settings.apiBaseUrl).catch(() => null);
     setBusy(false);
     if (!r) return;
     if (await save({ diaryText: r.text, diarySource: r.source })) toast(r.source === 'ai' ? 'AI 여행 일기를 만들었어요.' : `${r.fallbackReason ? `${r.fallbackReason} · ` : ''}기록 기반 일기를 만들었어요.`);
   };
 
   const addPhotos = async () => {
-    const files = await pickImages(true);
-    if (!files) return;
-    const list = [...photos];
-    for (const f of files.slice(0, 20)) {
-      try { const p: TripPhoto = { id: newId(), tripId: id, photoUri: await fileToDataUrl(f), createdAt: Date.now() }; await repo.addPhoto(p); list.push(p); }
-      catch (e) { toast((e as Error).message, 'error'); }
-    }
+    const added = await addPhotosToTrip(id, (m) => toast(m, 'error'));
+    if (!added) return;
+    const list = [...photos, ...added];
     setPhotos(list);
     if (!trip.coverPhotoUri && list[0]) await save({ coverPhotoUri: list[0].photoUri });
   };

@@ -1,11 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Check, FlaskConical, MapPin, Play, X } from 'lucide-react';
 import { useStore } from '../app/store';
-import { navigate } from '../app/router';
+import { navigate, queryParam, useRoute } from '../app/router';
+import { planRests } from '../domain/plan';
+import { formatDuration, formatKm } from '../domain/format';
+import { openNavigation } from '../places/navigation';
+import { getPlaceProvider, sortByDistance } from '../places/providers';
+import type { Place } from '../places/PlaceSearchProvider';
 import { REGIONS } from '../domain/regions';
 import type { GeoPoint } from '../domain/models';
 import { TripController, type StartKind } from '../trip/TripController';
-import { DEMO_DESTINATION } from '../vehicle/demoRoute';
+import { DEMO_DESTINATION, DEMO_TOTAL_KM, pointAtKm } from '../vehicle/demoRoute';
+import { ASSUMED_AVG_KMH } from '../domain/plan';
 import { Hint, Sheet, Switch, TopBar } from '../ui/components';
 import { PetAvatar, Scene } from '../ui/Art';
 import { RestIntervalPicker } from './PetForm';
@@ -15,8 +21,21 @@ export const DEMO_SPEEDS = [1, 10, 30, 60, 120, 300];
 export default function TripSetup() {
   const { pets, settings, updateSettings, toast } = useStore();
   const [selected, setSelected] = useState<string[]>(pets[0] ? [pets[0].id] : []);
-  const [destText, setDestText] = useState(settings.demoMode ? DEMO_DESTINATION.name : '');
-  const [dest, setDest] = useState<GeoPoint | null>(settings.demoMode ? DEMO_DESTINATION.point : null);
+  const route = useRoute();
+  const qDest = queryParam(route, 'dest');
+  const fromNavi = queryParam(route, 'from') === 'navi';
+  // 데모 모드에서 '강릉'을 고르면 데모 경로 목적지(경포해변)로 맞춤
+  const initial = (() => {
+    if (qDest) {
+      if (settings.demoMode && qDest === '강릉') return { text: DEMO_DESTINATION.name, point: DEMO_DESTINATION.point };
+      const r = REGIONS.find((x) => x.name === qDest);
+      if (r) return { text: r.name, point: r as GeoPoint };
+    }
+    return settings.demoMode ? { text: DEMO_DESTINATION.name, point: DEMO_DESTINATION.point } : { text: '', point: null };
+  })();
+  const [destText, setDestText] = useState(initial.text);
+  const [dest, setDest] = useState<GeoPoint | null>(initial.point);
+  const [restStops, setRestStops] = useState<{ atMin: number; atKm: number; place: Place | null }[]>([]);
   const [interval, setIntervalMin] = useState(pets[0]?.restIntervalMinutes ?? settings.defaultRestIntervalMinutes);
   const [recordRoute, setRecordRoute] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -27,6 +46,24 @@ export default function TripSetup() {
     if (!q || dest) return [];
     return REGIONS.filter((r) => r.name.includes(q) || r.province.includes(q)).slice(0, 6);
   }, [destText, dest]);
+
+  // 예상 휴식 계획: 데모 경로(서울→강릉)는 경로 거리로 추정, 그 외는 출발 위치를 알 수 없어 출발 후 계산
+  const isDemoDest = settings.demoMode && dest && Math.abs(dest.latitude - DEMO_DESTINATION.point.latitude) < 0.05 && Math.abs(dest.longitude - DEMO_DESTINATION.point.longitude) < 0.05;
+  const plan = isDemoDest ? planRests(DEMO_TOTAL_KM, interval, settings.skipRestNearArrival) : null;
+  const dueKey = plan?.dueAtMinutes.join(',') ?? '';
+  useEffect(() => {
+    if (!plan) { setRestStops([]); return; }
+    const provider = getPlaceProvider(settings.apiBaseUrl);
+    let cancel = false;
+    Promise.all(plan.dueAtMinutes.map(async (m) => {
+      const km = (m / 60) * ASSUMED_AVG_KMH;
+      const pt = pointAtKm(km);
+      const found = await provider.search({ category: 'restArea', centers: [pt], radiusKm: 8 }).catch(() => [] as Place[]);
+      const ranked = sortByDistance(found, pt).sort((a, b) => Number(!!(b.place.policy.smallDog || b.place.policy.largeDog)) - Number(!!(a.place.policy.smallDog || a.place.policy.largeDog)));
+      return { atMin: m, atKm: km, place: ranked[0]?.place ?? null };
+    })).then((r) => { if (!cancel) setRestStops(r); });
+    return () => { cancel = true; };
+  }, [dueKey, settings.apiBaseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const togglePet = (id: string) => {
     setSelected((s) => {
@@ -55,6 +92,7 @@ export default function TripSetup() {
     });
     setBusy(false);
     if (res.ok) {
+      void updateSettings({ safetyChecks: [] }); // 다음 여행을 위해 안전 체크 초기화
       navigate('/trip/live', { replace: true });
       return;
     }
@@ -73,6 +111,7 @@ export default function TripSetup() {
   return (
     <div className="screen no-nav">
       <TopBar title="여행 시작" />
+      {fromNavi && <div className="hint" style={{ marginBottom: 8 }}><span className="badge sample" style={{ height: 20 }}>데모</span>차량 내비에 설정된 목적지를 불러왔어요(실제 차량에서는 Pleos NaviHelper 연동 예정).</div>}
       {settings.demoMode && (
         <div className="demo-ribbon"><FlaskConical size={14} /> 데모 모드 · 실제 차량·위치 대신 가상 주행 데이터를 사용해요</div>
       )}
@@ -137,6 +176,60 @@ export default function TripSetup() {
         <h2 className="h-md">휴식 알림 간격</h2>
         <div className="mt-12"><RestIntervalPicker value={interval} onChange={setIntervalMin} /></div>
         <p className="t-cap mt-8">실제 주행 시간이 이 간격에 이르면 알려드려요. 신호 대기·정체는 휴식으로 세지 않아요.</p>
+      </section>
+
+      <section className="section">
+        <h2 className="h-md">반려견 맞춤 휴식 계획</h2>
+        {!plan ? (
+          <p className="t-sub mt-8">{dest ? '출발 위치를 아직 알 수 없어 예상 시간은 출발 후 계산해요.' : '목적지를 고르면 예상 주행 시간과 휴식 횟수를 알려드려요.'}</p>
+        ) : (
+          <div className="card mt-12">
+            <div className="grid-3">
+              <div><p className="k">예상 주행</p><p className="v">{formatDuration(plan.drivingMinutes * 60)}</p></div>
+              <div><p className="k">휴식 간격</p><p className="v">{interval}분</p></div>
+              <div><p className="k">예상 휴식</p><p className="v">{plan.minRests === plan.maxRests ? `${plan.minRests}회` : `${plan.minRests}~${plan.maxRests}회`}</p></div>
+            </div>
+            <p className="t-cap mt-12">{formatKm(DEMO_TOTAL_KM)} 경로 · 평균 {ASSUMED_AVG_KMH}km/h 가정 <b>(추정)</b> — 정체로 길어지면 휴식이 늘 수 있어요. 차량 내비 예상 시간 연동은 Android(NaviHelper)에서 진행 예정이에요.</p>
+            <label className="row mt-8" style={{ gap: 8, fontSize: 14 }}>
+              <Switch checked={settings.skipRestNearArrival} onChange={(v) => updateSettings({ skipRestNearArrival: v })} label="도착 직전 휴식 제외" />
+              도착 20분 전 이내의 휴식은 세지 않기
+            </label>
+            {restStops.length > 0 && (
+              <div className="mt-12">
+                <p style={{ fontWeight: 700, fontSize: 14 }}>경로 주변 휴식 장소 추천 <span className="badge sample" style={{ height: 20 }}>샘플 데이터</span></p>
+                {restStops.map((r) => (
+                  <div key={r.atMin} className="row-item" style={{ padding: '10px 0' }}>
+                    <span className="badge">{formatDuration(r.atMin * 60)} 후</span>
+                    <div className="grow">
+                      <p style={{ fontWeight: 650 }} className="ellipsis">{r.place?.name ?? '추천할 장소를 찾지 못했어요'}</p>
+                      <p className="t-cap">출발 후 약 {Math.round(r.atKm)}km 지점 · {r.place ? (r.place.policy.smallDog || r.place.policy.largeDog ? '동반 가능(샘플)' : '동반 여부 확인 필요') : ''}</p>
+                    </div>
+                  </div>
+                ))}
+                <p className="t-cap">출발 후 휴식 알림 때 이 장소를 다시 추천하고, 들를지 물어봐요. 경유지 추가는 직접 동의한 경우에만 요청해요.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="section">
+        <h2 className="h-md">내비게이션 연동</h2>
+        <div className="card mt-12" style={{ display: 'grid', gap: 10 }}>
+          <div className="row between">
+            <span style={{ fontSize: 14.5 }}>목적지를 내비게이션으로 보내기</span>
+            <button className="btn ghost sm" disabled={!dest} onClick={() => {
+              if (!dest) return;
+              const r = openNavigation(destText || '목적지', dest.latitude, dest.longitude, false);
+              if (!r.ok) toast(r.message!, 'error');
+            }}>보내기</button>
+          </div>
+          <p className="t-cap">웹: 카카오맵 길찾기 링크 · 차량: Pleos NaviHelper 목적지 설정(연동 예정, 미검증)</p>
+          <div className="divider" style={{ margin: 0 }} />
+          <div className="row between"><span style={{ fontSize: 14.5 }}>경로 옵션</span><span className="badge gray">차량 내비 설정을 따름</span></div>
+          <p className="t-cap">멍로드는 자체 ‘편한 길’ 알고리즘이나 급커브·급제동 회피 경로를 제공하지 않아요. 내비 SDK가 지원하는 경로 옵션만 연동할 예정이에요.</p>
+          <div className="row between"><span style={{ fontSize: 14.5 }}>내비 + 멍로드 분할 화면</span><span className="badge gray">미지원 · 차량 확인 필요</span></div>
+        </div>
       </section>
 
       <section className="section">

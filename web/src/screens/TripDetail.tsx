@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { Camera, Car, Check, ChevronRight, Clock3, Coffee, Download, FlaskConical, ImagePlus, Lock, MapPin, Pencil, PenLine, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
+import { drivingLocked } from '../trip/driveLock';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { ArrowLeft, ArrowRight, Camera, Car, Check, ChevronRight, Clock3, Coffee, Download, FlaskConical, ImagePlus, Lock, MapPin, MessageSquare, Pencil, PenLine, Route, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useStore } from '../app/store';
 import { back, navigate, queryParam } from '../app/router';
-import { fileToDataUrl, pickImages } from '../app/image';
+import { addPhotosToTrip } from '../app/photos';
+import { buildDiaryInput } from '../diary/buildInput';
 import { renderShareCard } from '../app/shareCard';
 import { repo } from '../data/db';
-import { CATEGORY_LABEL, newId, SOURCE_LABEL, type RestSession, type Trip, type TripLocation, type TripPhoto, type VisitedPlace } from '../domain/models';
+import { CATEGORY_LABEL, LEG_LABEL, PHASE_LABEL, SOURCE_LABEL, type DriveLeg, type RestSession, type Trip, type TripLocation, type TripPhoto, type VisitedPlace } from '../domain/models';
 import { formatDuration, formatKm, formatKoreanDate, formatShortDate, formatTime } from '../domain/format';
 import { regionLabel, regionShort } from '../domain/regions';
 import { petNames as joinPetNames } from '../domain/tripText';
@@ -21,6 +23,7 @@ interface Data {
   rests: RestSession[];
   places: VisitedPlace[];
   photos: TripPhoto[];
+  legs: DriveLeg[];
 }
 
 export default function TripDetail({ id, route, onChanged }: { id: string; route: string; onChanged: () => Promise<void> }) {
@@ -36,15 +39,16 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
   const [share, setShare] = useState<{ url: string; blob: Blob } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [manualKm, setManualKm] = useState('');
+  const [photoMemo, setPhotoMemo] = useState<{ photo: TripPhoto; text: string } | null>(null);
   const isNew = queryParam(route, 'new') === '1';
-  const driving = live.active && live.engine?.status === 'driving';
+  const driving = drivingLocked(live);
 
   const load = useCallback(async () => {
     try {
       const trip = await repo.getTrip(id);
       if (!trip) { setError('여행 기록을 찾을 수 없어요.'); return; }
-      const [locs, rests, places, photos] = await Promise.all([repo.locationsOf(id), repo.restsOf(id), repo.placesOf(id), repo.photosOf(id)]);
-      setData({ trip, locs, rests, places, photos });
+      const [locs, rests, places, photos, legs] = await Promise.all([repo.locationsOf(id), repo.restsOf(id), repo.placesOf(id), repo.photosOf(id), repo.legsOf(id)]);
+      setData({ trip, locs, rests, places, photos, legs });
       setMemo(trip.memo);
       setError(null);
     } catch (e) {
@@ -53,11 +57,19 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
   }, [id]);
 
   useEffect(() => { void load(); }, [load]);
+  const wantShare = queryParam(route, 'share') === '1';
+  const sharedOnce = useRef(false);
+  useEffect(() => {
+    if (wantShare && data && !sharedOnce.current) { sharedOnce.current = true; void makeShareRef.current?.(); }
+  }, [wantShare, data]);
+  const makeShareRef = useRef<(() => Promise<void>) | null>(null);
 
   if (error) return <div className="screen no-nav"><TopBar title="여행 상세" /><ErrorState desc={error} onRetry={load} extra={<button className="btn ghost sm" onClick={() => navigate('/album', { replace: true })}>앨범으로</button>} /></div>;
   if (!data) return <div className="screen no-nav"><TopBar title="여행 상세" /><Loading /></div>;
 
-  const { trip, locs, rests, places, photos } = data;
+  const { trip, locs, rests, places, photos, legs } = data;
+  const inProgress = trip.phase !== 'completed';
+  const isLiveTrip = live.trip?.id === trip.id;
   const pets = petsOfTrip(trip.id);
   const names = pets.map((p) => p.name);
   const restTotal = rests.reduce((a, r) => a + (r.endTime ? (r.endTime - r.startTime) / 1000 : 0), 0);
@@ -68,6 +80,7 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
     try {
       await repo.saveTrip(next);
       setData({ ...data, trip: next });
+      if (isLiveTrip) await TripController.refreshTrip(); // 진행 중 여행이면 컨트롤러 사본도 맞춤(덮어쓰기 방지)
       await onChanged();
       return true;
     } catch (e) {
@@ -76,23 +89,9 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
     }
   };
 
-  const diaryInput = () => ({
-    petNames: names.length ? names : ['우리 강아지'],
-    startTime: trip.startTime,
-    startRegion: trip.startLocation ? regionShort(trip.startLocation) : null,
-    endRegion: trip.endLocation ? regionShort(trip.endLocation) : trip.destinationName,
-    distanceKm: trip.totalDistanceKm,
-    drivingSec: trip.drivingDurationSeconds,
-    elapsedSec: trip.elapsedDurationSeconds,
-    restCount: rests.filter((r) => r.endTime).length,
-    places: places.map((p) => ({ name: p.placeName, category: p.category, isSample: p.isSample })),
-    photoCount: photos.length,
-    memo,
-  });
-
   const genDiary = async () => {
     setGenBusy(true);
-    const r = await generateDiary(diaryInput(), settings.apiBaseUrl).catch(() => null);
+    const r = await generateDiary(await buildDiaryInput({ ...trip, memo }, names), settings.apiBaseUrl).catch(() => null);
     setGenBusy(false);
     if (!r) return;
     if (await save({ diaryText: r.text, diarySource: r.source, memo })) {
@@ -102,26 +101,21 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
   };
 
   const addPhotos = async () => {
-    const files = await pickImages(true);
-    if (!files) return; // 선택 취소
-    let added = 0;
-    const list = [...photos];
-    for (const f of files.slice(0, 20)) {
-      try {
-        const uri = await fileToDataUrl(f);
-        const p: TripPhoto = { id: newId(), tripId: trip.id, photoUri: uri, createdAt: Date.now() };
-        await repo.addPhoto(p);
-        list.push(p);
-        added++;
-      } catch (e) {
-        toast((e as Error).message, 'error');
-      }
-    }
-    if (added) {
-      setData({ ...data, photos: list });
-      if (!trip.coverPhotoUri) await save({ coverPhotoUri: list[0].photoUri });
-      toast(`사진 ${added}장을 추가했어요.`);
-    }
+    const added = await addPhotosToTrip(trip.id, (m) => toast(m, 'error'));
+    if (!added || added.length === 0) return;
+    const list = [...photos, ...added];
+    setData({ ...data, photos: list });
+    if (!trip.coverPhotoUri) await save({ coverPhotoUri: list[0].photoUri });
+    toast(`사진 ${added.length}장을 추가했어요. 기존 기록은 그대로예요.`);
+  };
+
+  const movePhoto = async (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= photos.length) return;
+    const next = [...photos];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setData({ ...data, photos: next.map((p, i) => ({ ...p, order: i })) });
+    try { await repo.reorderPhotos(trip.id, next.map((p) => p.id)); } catch (e) { toast((e as Error).message, 'error'); }
   };
 
   const makeShare = async () => {
@@ -141,6 +135,8 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
       toast((e as Error).message, 'error');
     }
   };
+
+  makeShareRef.current = makeShare;
 
   const doShare = async () => {
     if (!share) return;
@@ -174,7 +170,15 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
       {isNew && (
         <div className="hint green" style={{ marginBottom: 14 }}>
           <Check size={16} />
-          <div>여행이 저장됐어요! 제목을 다듬고 사진과 메모를 남긴 뒤 여행 일기를 만들어 보세요.</div>
+          <div>여행을 완료했어요! 사진과 메모는 언제든 더 추가할 수 있고, 여행 일기도 다시 만들 수 있어요.</div>
+        </div>
+      )}
+      {inProgress && (
+        <div className="hint" style={{ marginBottom: 14 }}>
+          <Route size={16} />
+          <div className="grow">진행 중인 여행이에요 · <b>{PHASE_LABEL[trip.phase]}</b>
+            {isLiveTrip && <button className="link" style={{ marginLeft: 8, color: 'var(--primary)' }} onClick={() => navigate(live.driving ? '/trip/live' : '/home')}>{live.driving ? '주행 화면으로' : '여행지 활동으로'} <ChevronRight size={14} /></button>}
+          </div>
         </div>
       )}
 
@@ -200,7 +204,7 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
             <button className="icon-btn" aria-label="제목 수정" onClick={() => { setTitleDraft(trip.title); setEditingTitle(true); }}><Pencil size={18} /></button>
           </div>
         )}
-        <p className="t-sub mt-8">{formatKoreanDate(trip.startTime)} · {formatTime(trip.startTime)} ~ {trip.endTime ? formatTime(trip.endTime) : '진행 중'}</p>
+        <p className="t-sub mt-8">{formatKoreanDate(trip.startTime)} · {formatTime(trip.startTime)} ~ {trip.endTime && !inProgress ? formatTime(trip.endTime) : '진행 중'}</p>
         <p className="t-sub row" style={{ gap: 4 }}><MapPin size={14} />{regionLabel(trip.startLocation)} → {trip.endLocation ? regionLabel(trip.endLocation) : trip.destinationName ?? '알 수 없는 지역'}</p>
         <p className="t-cap mt-8">함께한 친구: {names.join(', ') || '정보 없음'} · 기록 방식: {SOURCE_LABEL[trip.source]}</p>
       </div>
@@ -220,6 +224,23 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
         <button className="tile" onClick={makeShare}><Share2 size={26} />공유하기</button>
       </div>
       {driving && <p className="lock-note mt-8"><Lock size={15} />주행 중에는 상세 편집이 잠겨요. 정차 후 이용해 주세요.</p>}
+
+      <section className="section">
+        <h2 className="h-md row" style={{ gap: 6 }}><Car size={18} color="var(--primary)" />주행 기록</h2>
+        {legs.length === 0 ? <p className="t-sub mt-8">저장된 주행 구간이 없어요.</p> : (
+          <div className="card mt-12" style={{ padding: '4px 18px' }}>
+            {legs.map((l) => (
+              <div key={l.id} className="row-item">
+                <span className="badge" style={{ background: l.kind === 'return' ? 'var(--mint)' : 'var(--primary-soft)', color: l.kind === 'return' ? 'var(--mint-text)' : 'var(--primary)' }}>{LEG_LABEL[l.kind]}</span>
+                <div className="grow">
+                  <p style={{ fontWeight: 650 }}>{formatKm(l.distanceKm)} · 주행 {formatDuration(l.drivingDurationSeconds)}{l.restCount ? ` · 휴식 ${l.restCount}회` : ''}</p>
+                  <p className="t-cap">{formatTime(l.startTime)} ~ {l.endTime ? formatTime(l.endTime) : '기록 중'} · {regionShort(l.startLocation)} → {regionShort(l.endLocation)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {route2.length > 1 ? (
         <div className="mt-16"><MapView route={route2} markers={markers} height={240} ariaLabel="이동 경로 지도" /></div>
@@ -273,7 +294,8 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
                 <PlaceThumb category={p.category} size={40} radius={12} />
                 <div className="grow">
                   <p style={{ fontWeight: 650 }} className="ellipsis">{p.placeName} {p.isSample && <span className="badge sample">샘플</span>}</p>
-                  <p className="t-cap">{CATEGORY_LABEL[p.category]} · {formatTime(p.visitedAt)}</p>
+                  <p className="t-cap">{CATEGORY_LABEL[p.category]} · {formatTime(p.visitedAt)}{p.source === 'user' ? ' · 직접 기록' : ''}</p>
+                  {p.memo && <p className="t-sub" style={{ fontSize: 13 }}>“{p.memo}”</p>}
                 </div>
                 <button className="icon-btn" aria-label={`${p.placeName} 삭제`} onClick={async () => {
                   try { await repo.deleteVisitedPlace(p.id); setData({ ...data, places: places.filter((x) => x.id !== p.id) }); } catch (e) { toast((e as Error).message, 'error'); }
@@ -287,24 +309,32 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
 
       <section className="section">
         <div className="section-head"><h2 className="h-md">사진</h2><span className="t-cap">{photos.length}장</span></div>
+        <p className="t-cap" style={{ marginBottom: 8 }}>★ 대표 사진 · ◀ ▶ 순서 바꾸기 · 💬 사진 메모 — 여행을 마친 뒤에도 추가·삭제할 수 있어요.</p>
         <div className="photo-grid">
-          {photos.map((p) => (
-            <div key={p.id}>
-              <img src={p.photoUri} alt="여행 사진" />
-              <div style={{ position: 'absolute', right: 4, top: 4, display: 'flex', gap: 4 }}>
-                <button className="icon-btn" style={{ width: 30, height: 30, background: trip.coverPhotoUri === p.photoUri ? 'var(--accent)' : 'rgba(0,0,0,.4)', color: '#fff' }} aria-label="대표 사진으로 지정" onClick={() => save({ coverPhotoUri: p.photoUri })}><Star size={15} /></button>
-                <button className="icon-btn" style={{ width: 30, height: 30, background: 'rgba(0,0,0,.4)', color: '#fff' }} aria-label="사진 삭제" onClick={async () => {
-                  try {
-                    await repo.deletePhoto(p.id);
-                    const rest = photos.filter((x) => x.id !== p.id);
-                    setData({ ...data, photos: rest });
-                    if (trip.coverPhotoUri === p.photoUri) await save({ coverPhotoUri: rest[0]?.photoUri ?? null });
-                  } catch (e) { toast((e as Error).message, 'error'); }
-                }}><Trash2 size={14} /></button>
-              </div>
+          {photos.map((p, i) => (
+            <div key={p.id} className="photo-cell">
+              <img src={p.photoUri} alt={p.memo || `여행 사진 ${i + 1}`} />
+              {trip.coverPhotoUri === p.photoUri && <span className="badge" style={{ position: 'absolute', left: 4, top: 4, height: 20, background: 'var(--accent)', color: '#3b2b10' }}>대표</span>}
+              {p.memo && <span className="photo-memo">{p.memo}</span>}
+              {!driving && (
+                <div className="photo-tools">
+                  <button aria-label="앞으로" disabled={i === 0} onClick={() => movePhoto(i, -1)}><ArrowLeft size={14} /></button>
+                  <button aria-label="대표 사진으로 지정" onClick={() => save({ coverPhotoUri: p.photoUri })}><Star size={14} /></button>
+                  <button aria-label="사진 메모" onClick={() => setPhotoMemo({ photo: p, text: p.memo })}><MessageSquare size={14} /></button>
+                  <button aria-label="사진 삭제" onClick={async () => {
+                    try {
+                      await repo.deletePhoto(p.id);
+                      const rest = photos.filter((x) => x.id !== p.id);
+                      setData({ ...data, photos: rest });
+                      if (trip.coverPhotoUri === p.photoUri) await save({ coverPhotoUri: rest[0]?.photoUri ?? null });
+                    } catch (e) { toast((e as Error).message, 'error'); }
+                  }}><Trash2 size={13} /></button>
+                  <button aria-label="뒤로" disabled={i === photos.length - 1} onClick={() => movePhoto(i, 1)}><ArrowRight size={14} /></button>
+                </div>
+              )}
             </div>
           ))}
-          <button className="photo-add" onClick={addPhotos} aria-label="사진 추가"><span style={{ display: 'grid', placeItems: 'center', gap: 4 }}><ImagePlus size={22} />사진 추가</span></button>
+          <button className="photo-add" disabled={driving} onClick={addPhotos} aria-label="사진 추가"><span style={{ display: 'grid', placeItems: 'center', gap: 4 }}><ImagePlus size={22} />사진 추가</span></button>
         </div>
       </section>
 
@@ -350,6 +380,22 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
         <button className="btn secondary" onClick={makeShare}><Share2 size={18} />공유 이미지</button>
         <button className="btn danger" onClick={() => setConfirmDelete(true)}><Trash2 size={18} />기록 삭제</button>
       </div>
+
+      <Sheet open={!!photoMemo} onClose={() => setPhotoMemo(null)} labelledBy="pm-title">
+        <h2 id="pm-title" className="h-md">사진 메모</h2>
+        {photoMemo && <img src={photoMemo.photo.photoUri} alt="" className="mt-12" style={{ borderRadius: 14, maxHeight: 220, objectFit: 'cover', width: '100%' }} />}
+        <textarea className="input mt-12" maxLength={200} placeholder="이 사진에 남기고 싶은 말 (일기에 그대로 인용돼요)" value={photoMemo?.text ?? ''} onChange={(e) => setPhotoMemo((m) => (m ? { ...m, text: e.target.value } : m))} aria-label="사진 메모" />
+        <button className="btn primary block mt-12" onClick={async () => {
+          if (!photoMemo) return;
+          const next = { ...photoMemo.photo, memo: photoMemo.text.trim() };
+          try {
+            await repo.updatePhoto(next);
+            setData({ ...data, photos: photos.map((x) => (x.id === next.id ? next : x)) });
+            setPhotoMemo(null);
+            toast('사진 메모를 저장했어요.');
+          } catch (e) { toast((e as Error).message, 'error'); }
+        }}>저장</button>
+      </Sheet>
 
       <Sheet open={!!share} onClose={() => { if (share) URL.revokeObjectURL(share.url); setShare(null); }} labelledBy="share-title">
         <h2 id="share-title" className="h-lg">공유 이미지</h2>
