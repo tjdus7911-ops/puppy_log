@@ -26,3 +26,24 @@ jobs:
             android/app/build/outputs/apk/debug/*.apk
             android/app/build/reports/tests/
           if-no-files-found: warn
+
+  # Pleos Connect SDK 포함 빌드(공개 Maven: nexus-playground.pleos.ai). 실제 SDK 시그니처로 컴파일되는지 확인
+  build-pleos:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: android } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build with Pleos SDK
+        run: |
+          chmod +x gradlew
+          echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
+          ./gradlew --no-daemon :app:assembleDebug -Pmungroad.usePleosSdk=true -Pmungroad.useKakaoMap=false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mungroad-pleos-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn

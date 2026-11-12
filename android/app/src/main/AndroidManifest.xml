@@ -9,6 +9,17 @@
     <!-- AAOS 표준 속성 권한: GEAR_SELECTION → CAR_POWERTRAIN(normal), PERF_VEHICLE_SPEED → CAR_SPEED(dangerous) -->
     <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
     <uses-permission android:name="android.car.permission.CAR_SPEED" />
+    <!-- 외기 온도(더운 날 반려견 안내) -->
+    <uses-permission android:name="android.car.permission.CAR_EXTERIOR_ENVIRONMENT" />
+    <!-- Pleos Vehicle SDK: 쓰는 도메인만 선언(뒷문·뒷창 상태 읽기, 에어컨 상태·켜기, 방향지시등) -->
+    <uses-permission android:name="pleos.car.permission.CAR_DOORS" />
+    <uses-permission android:name="pleos.car.permission.CAR_WINDOWS" />
+    <uses-permission android:name="pleos.car.permission.CAR_CLIMATE" />
+    <uses-permission android:name="pleos.car.permission.CONTROL_CAR_CLIMATE" />
+    <uses-permission android:name="pleos.car.permission.CAR_LIGHTS" />
+    <!-- Pleos NaviHelper: 목적지·경유지·경로 옵션 -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" />
     <!-- Pleos Vehicle SDK 권한은 사용하는 API의 @RequiresPermission(PleosPermission)을 확인해 추가합니다. -->
 
     <uses-feature android:name="android.hardware.type.automotive" android:required="false" />

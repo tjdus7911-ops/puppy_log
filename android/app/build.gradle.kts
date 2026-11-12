@@ -81,6 +81,7 @@ dependencies {
         // 버전은 Pleos 문서의 최신 값으로 맞추세요(문서 시점 예: Vehicle 2.3.x, NaviHelper 3.0.x).
         implementation("ai.pleos.playground:Vehicle:${prop("pleos.vehicleVersion", "2.3.2")}")
         implementation("ai.pleos.playground:NaviHelper:${prop("pleos.naviHelperVersion", "3.0.5")}")
+        implementation("ai.pleos.playground:TextToSpeech:${prop("pleos.ttsVersion", "3.3.1")}")
     }
     if (useKakaoMap) {
         implementation("com.kakao.maps.open:android:${prop("kakao.mapVersion", "2.12.7")}")
