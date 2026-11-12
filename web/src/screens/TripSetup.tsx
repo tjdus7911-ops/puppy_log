@@ -60,7 +60,8 @@ export default function TripSetup() {
   const [permSheet, setPermSheet] = useState<string | null>(null);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const wide = useWide();
-  const [carStep, setCarStep] = useState<1 | 2 | 3>(pets.length > 1 ? 1 : 2);
+  // ?step=plan: '여행 계획'(출발 전 목적지·경로·휴식 계획)에서 진입 → 목적지 단계부터
+  const [carStep, setCarStep] = useState<1 | 2 | 3>(queryParam(route, 'step') === 'plan' || pets.length <= 1 ? 2 : 1);
   const [carQ, setCarQ] = useState('');
   useEffect(() => { if (wide && pets.length === 0) navigate('/pet/new?first=1', { replace: true }); }, [wide, pets.length]);
 

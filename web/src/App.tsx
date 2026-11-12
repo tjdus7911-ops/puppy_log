@@ -19,6 +19,7 @@ import DiaryScreen from './screens/DiaryScreen';
 import PawMap from './screens/PawMap';
 import MyPage from './screens/MyPage';
 import PetsScreen from './screens/PetsScreen';
+import TripHub from './screens/TripHub';
 import Destination from './screens/Destination';
 import Community from './screens/Community';
 import PostDetail from './screens/community/PostDetail';
@@ -48,7 +49,7 @@ const TABS = [
 // 차량 왼쪽 메뉴(시안): 홈 · 여행/경로 · 내 반려견 · 여행 기록 · 설정 — 커뮤니티는 모바일 전용
 const CAR_TABS = [
   { key: 'home', label: '홈', icon: House, match: ['/home'] },
-  { key: 'move', label: '여행', icon: Navigation, match: ['/trip/live', '/trip/setup', '/explore'] },
+  { key: 'move', label: '여행', icon: Navigation, match: ['/trip', '/trip/live', '/trip/setup', '/trip/destination', '/explore'] },
   { key: 'pets', label: '내 반려견', icon: PawPrint, match: ['/pets', '/pet'] },
   { key: 'record', label: '여행 기록', icon: Clock3, match: ['/album', '/pawmap', '/community'] },
   { key: 'settings', label: '설정', icon: Settings, match: ['/my'] },
@@ -57,7 +58,12 @@ const CAR_TABS = [
 function goTab(key: (typeof TABS)[number]['key'] | (typeof CAR_TABS)[number]['key']) {
   if (key === 'home') navigate('/home');
   else if (key === 'pets') navigate('/pets');
-  else if (key === 'move') navigate(!TripController.isActive ? '/trip/setup' : TripController.phase === 'at-destination' ? '/home' : '/trip/live');
+  else if (key === 'move') {
+    // 차량: '여행' = 여행 허브(진행 중이면 해당 화면) / 모바일: 기존처럼 새 여행 또는 진행 화면
+    const carWide = window.matchMedia('(min-width: 900px)').matches;
+    if (!TripController.isActive) navigate(carWide ? '/trip' : '/trip/setup');
+    else navigate(TripController.phase === 'at-destination' ? (carWide ? '/trip/destination' : '/home') : '/trip/live');
+  }
   else if (key === 'record') navigate('/album');
   else if (key === 'community') navigate('/community');
   else navigate('/my');
@@ -120,6 +126,7 @@ function Shell() {
   else if (path === '/community/new/done') screen = <UploadDone />;
   else if (path === '/my') screen = <MyPage />;
   else if (path === '/pets') screen = <PetsScreen />;
+  else if (path === '/trip') screen = <TripHub />;
   else if (path === '/trip/destination') screen = live.active && live.phase === 'at-destination' ? <Destination /> : <Home />;
   else screen = <Home />;
 

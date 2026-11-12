@@ -219,3 +219,23 @@ describe('여행 중 휴식 알림 간격 변경', () => {
     expect(changeRestInterval(s, 999).restIntervalMin).toBe(240); // 상한
   });
 });
+
+import { mainPetOf, welcomeLead } from './tripText';
+describe('홈 환영 문구', () => {
+  it('받침에 따라 과/와', () => {
+    expect(welcomeLead('사슴')).toBe('사슴과 떠나는');
+    expect(welcomeLead('초코')).toBe('초코와 떠나는');
+    expect(welcomeLead('보리')).toBe('보리와 떠나는');
+    expect(welcomeLead('콩')).toBe('콩과 떠나는');
+  });
+  it('반려견이 없으면 기본 문구', () => {
+    expect(welcomeLead(null)).toBe('반려견과 떠나는');
+    expect(welcomeLead('  ')).toBe('반려견과 떠나는');
+  });
+  it('대표 반려견: 설정값 → 없으면 첫 번째', () => {
+    const pets = [{ id: 'a', name: '사슴' }, { id: 'b', name: '초코' }];
+    expect(mainPetOf(pets, 'b')?.name).toBe('초코');
+    expect(mainPetOf(pets, 'deleted')?.name).toBe('사슴');
+    expect(mainPetOf([], 'b')).toBeNull();
+  });
+});

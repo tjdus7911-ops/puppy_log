@@ -99,3 +99,15 @@ export function templateDiary(d: DiaryInput): string {
   lines.push(`${withJosa} 함께한 오늘의 길도 오래 기억하고 싶은 하루로 남겨 둔다.`);
   return lines.join('\n\n');
 }
+
+/** 대표 반려견: 설정한 반려견이 없거나 삭제됐으면 첫 번째 */
+export function mainPetOf<T extends { id: string }>(pets: T[], mainPetId: string | null | undefined): T | null {
+  return pets.find((p) => p.id === mainPetId) ?? pets[0] ?? null;
+}
+
+/** 홈 환영 문구 첫 줄: "사슴과 떠나는" / "초코와 떠나는" / 반려견이 없으면 "반려견과 떠나는" */
+export function welcomeLead(name: string | null | undefined): string {
+  const n = name?.trim();
+  if (!n) return '반려견과 떠나는';
+  return `${n}${josa(n, '과', '와')} 떠나는`;
+}

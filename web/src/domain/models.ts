@@ -169,6 +169,8 @@ export interface AppSettings {
   autoRecoCategories: PlaceCategory[];
   /** 예상 휴식 계산 시 도착 직전(20분 이내) 휴식은 세지 않음 */
   skipRestNearArrival: boolean;
+  /** 대표 반려견(홈 환영 문구·나의 반려견 카드). 없거나 삭제됐으면 첫 번째 반려견 */
+  mainPetId?: string | null;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -184,6 +186,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoRecommend: true,
   autoRecoCategories: ['restArea', 'cafe', 'park', 'restaurant'],
   skipRestNearArrival: true,
+  mainPetId: null,
 };
 
 export function mapJsKey(s: AppSettings): string {
