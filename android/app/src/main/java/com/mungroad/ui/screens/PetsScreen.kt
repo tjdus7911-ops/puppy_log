@@ -91,7 +91,13 @@ private fun PetEditDialog(p0: PetEntity, isNew: Boolean, onClose: () -> Unit, on
 
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(if (isNew) "반려견 등록" else "${p0.name} 정보") },
+        // 차량 화면은 세로가 짧아 키보드가 아래 버튼을 가릴 수 있어 제목 줄에도 저장 버튼을 둡니다.
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (isNew) "반려견 등록" else "${p0.name} 정보", Modifier.weight(1f))
+                TextButton(enabled = p.name.isNotBlank(), onClick = { onSave(draft.copy(name = p.name.trim())) }) { Text("저장", fontWeight = FontWeight.Bold) }
+            }
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(p.name, { p = p.copy(name = it) }, label = { Text("이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
