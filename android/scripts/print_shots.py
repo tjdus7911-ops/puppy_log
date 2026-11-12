@@ -11,10 +11,12 @@ except ImportError:
         Image = None
 for f in sorted(glob.glob("shots/*.png")):
     if Image:
-        im = Image.open(f).convert("RGB"); im.thumbnail((1200, 1200))
+        im = Image.open(f).convert("RGB"); im.thumbnail((1100, 1100))
         b = io.BytesIO(); im.save(b, "JPEG", quality=62); data = b.getvalue()
     else:
         data = open(f, "rb").read()
     print(f"===SHOT {f}===")
-    print(base64.b64encode(data).decode())
+    enc = base64.b64encode(data).decode()
+    for i in range(0, len(enc), 3000):
+        print(enc[i:i + 3000])
     print("===END===")

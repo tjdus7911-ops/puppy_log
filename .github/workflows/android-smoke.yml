@@ -34,5 +34,10 @@ jobs:
             adb shell settings put system user_rotation 1
             for i in $(adb shell ime list -s); do adb shell ime disable $i; done
             adb install -r -g android/app/build/outputs/apk/debug/app-debug.apk
-            python3 android/scripts/smoke_ui.py com.mungroad || (python3 android/scripts/print_shots.py; exit 1)
-            python3 android/scripts/print_shots.py
+            python3 android/scripts/smoke_ui.py com.mungroad
+      - uses: actions/setup-python@v5
+        if: always()
+        with: { python-version: '3.12' }
+      - name: 화면 캡처 출력
+        if: always()
+        run: pip install -q pillow && python android/scripts/print_shots.py
