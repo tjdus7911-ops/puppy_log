@@ -123,7 +123,9 @@ class PleosVehicleDataProvider(private val context: Context) : VehicleDataProvid
 // ---------------------------------------------------------------------------
 // 3) 데모 시뮬레이터 (웹 DemoVehicleDataProvider 와 같은 시나리오)
 // ---------------------------------------------------------------------------
-class DemoVehicleDataProvider(startTime: Long, @Volatile var speedMultiplier: Int = 60) : VehicleDataProvider {
+/** reverse=true 이면 돌아오는 길(강릉 → 서울). stopHold=true 이면 데모 차량을 잠시 세움(휴게소 정차 시뮬레이션) */
+class DemoVehicleDataProvider(startTime: Long, @Volatile var speedMultiplier: Int = 60, private val reverse: Boolean = false) : VehicleDataProvider {
+    @Volatile var stopHold = false
     override val source = DataSource.DEMO
     override val isSimulated = true
     override val capabilities = VehicleDataProvider.Capabilities(location = true, speed = true, motionState = true, parkingState = true)
@@ -141,18 +143,18 @@ class DemoVehicleDataProvider(startTime: Long, @Volatile var speedMultiplier: In
             delay(250)
             repeat(maxOf(1, speedMultiplier / 4)) {
                 simTime += 1000
-                val target = if (resting) 0.0 else DemoRoute.targetSpeed(km)
+                val target = if (resting || stopHold) 0.0 else DemoRoute.targetSpeed(km)
                 speed += (target - speed).coerceIn(-6.0, 6.0)
                 km = minOf(DemoRoute.totalKm, km + speed / 3600)
                 sinceSample += 1
                 if (sinceSample >= 5) {
                     sinceSample = 0.0
-                    val (lat, lng) = DemoRoute.pointAt(km)
+                    val (lat, lng) = DemoRoute.pointAt(if (reverse) DemoRoute.totalKm - km else km)
                     emit(VehicleSample(simTime, lat, lng, 8f, speed.toFloat(), if (resting) Motion.PARKED else if (speed >= 1) Motion.MOVING else Motion.STOPPED))
                 }
             }
         }
-        val (lat, lng) = DemoRoute.pointAt(km)
+        val (lat, lng) = DemoRoute.pointAt(if (reverse) DemoRoute.totalKm - km else km)
         emit(VehicleSample(simTime, lat, lng, 8f, 0f, Motion.PARKED))
     }
 }

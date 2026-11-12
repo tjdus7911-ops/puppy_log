@@ -36,6 +36,18 @@ data class PetEntity(
     val notes: String,
     val restIntervalMinutes: Int,
     val createdAt: Long,
+    // ── v3: 여행 케어(휴식 간격 기준표 · 모두 선택 입력, 이 기기에만 저장) ──
+    val breed: String? = null,
+    /** 노령견 여부(보호자 확인). null 이면 나이·체급으로 제안 */
+    val senior: Boolean? = null,
+    /** 단두종 여부(보호자 확인). null 이면 견종 이름으로 제안 */
+    val brachycephalic: Boolean? = null,
+    /** HealthCondition 이름(NONE · JOINT_HEART_RESP · KIDNEY_DIABETES) */
+    val healthCondition: String? = null,
+    /** 수의사에게 안내받은 휴식 간격(분) — 있으면 최우선 */
+    val vetRestIntervalMinutes: Int? = null,
+    /** 보호자가 기준표 추천 대신 간격을 직접 정했는지 */
+    @ColumnInfo(defaultValue = "0") val guardianInterval: Boolean = false,
 )
 
 @Entity(tableName = "trip", indices = [Index("startTime")])
@@ -65,6 +77,11 @@ data class TripEntity(
     val arrivedAt: Long? = null,
     val returnStartedAt: Long? = null,
     @ColumnInfo(defaultValue = "0") val updatedAt: Long = 0,
+    // ── v3 ──
+    /** 휴식 간격 근거(RestBasis 이름) */
+    val restBasis: String? = null,
+    /** 경로 옵션: 편한 길(기본) */
+    @ColumnInfo(defaultValue = "1") val routeComfortable: Boolean = true,
 )
 
 @Entity(

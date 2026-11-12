@@ -27,6 +27,7 @@ import ai.pleos.playground.vehicle.listener.TurnSignalStateListener
 import android.content.Context
 import android.util.Log
 import com.mungroad.providers.GeoPoint
+import com.mungroad.providers.NavEvent
 import com.mungroad.providers.NavRequestResult
 import com.mungroad.providers.NavigationProvider
 import com.mungroad.providers.Provenance
@@ -38,6 +39,7 @@ import com.mungroad.vehicle.Speaker
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -63,14 +65,16 @@ private class PleosNavigationProvider(context: Context) : NavigationProvider {
     override val provenance = Provenance.REAL
     private val navi = NaviHelper(context)
     @Volatile private var lastDriving: DrivingInfo? = null
+    @Volatile private var comfortable = true
+    private val navEvents = MutableSharedFlow<NavEvent>(extraBufferCapacity = 8)
     @Volatile private var lastDestinationName: String? = null
     @Volatile var arrived: DestinationArrivedInfo? = null
         private set
 
     private val listener = object : NaviHelperEventListener {
         override fun onDrivingInfo(drivingInfo: DrivingInfo) { lastDriving = drivingInfo }
-        override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) { arrived = destinationArrivedInfo }
-        override fun onRouteCancelled() { lastDriving = null }
+        override fun onDestinationArrived(destinationArrivedInfo: DestinationArrivedInfo) { arrived = destinationArrivedInfo; navEvents.tryEmit(NavEvent.Arrived(lastDestinationName)) }
+        override fun onRouteCancelled() { lastDriving = null; navEvents.tryEmit(NavEvent.RouteCancelled) }
         override fun onError(errorCode: NaviErrorCode) { Log.w("MungRoadPleos", "NaviHelper 오류: $errorCode") }
     }
 
@@ -103,14 +107,24 @@ private class PleosNavigationProvider(context: Context) : NavigationProvider {
             // 반려견이 탄 날 기본 경로 옵션: 편한 길(RouteOption.COMFORTABLE)
             navi.requestRoute(RouteInfo(
                 latitude = point.lat, longitude = point.lng, poiName = name, poiId = poiId,
-                poiSubId = "0", address = name, routeOption = RouteOption.COMFORTABLE,
+                poiSubId = "0", address = name, routeOption = if (comfortable) RouteOption.COMFORTABLE else RouteOption.RECOMMENDED,
             ))
         }
         // 성공 여부는 리스너 콜백으로 확정(요청 성공 ≠ 경로 탐색 완료)
         if (preferWaypoint) NavRequestResult.WaypointAdded else NavRequestResult.RouteRequested
     }.getOrElse { NavRequestResult.Failed("내비 요청 실패: ${it.message}") }
 
-    fun changeToComfortable() = runCatching { navi.changeRouteOption(RouteOption.COMFORTABLE) }
+    override fun events(): Flow<NavEvent> = navEvents
+
+    // 반려견이 탄 날 기본값 편한 길(COMFORTABLE), 끄면 추천 경로(RECOMMENDED)
+    override suspend fun setRouteOption(comfortable: Boolean): Boolean =
+        runCatching {
+            this.comfortable = comfortable
+            navi.changeRouteOption(if (comfortable) RouteOption.COMFORTABLE else RouteOption.RECOMMENDED); true }.getOrDefault(false)
+
+    override suspend fun clearWaypoints(): Boolean = runCatching { navi.removeWaypoint(WaypointIndex.ALL); true }.getOrDefault(false)
+
+    override suspend fun cancelRoute() { runCatching { navi.cancelRoute() } }
 }
 
 // ─────────────────────────── Vehicle SDK: 창문·문·에어컨·방향지시등 ───────────────────────────
@@ -182,7 +196,8 @@ private class PleosCabinSource(context: Context) : CabinSource {
 // ─────────────────────────── TextToSpeech(HYBRID: 네트워크가 불안정해도 온디바이스) ───────────────────────────
 private class PleosSpeaker(context: Context) : Speaker {
     private val tts = TextToSpeech(context, Mode.HYBRID)
-    @Volatile private var ready = false
+    @Volatile override var ready = false
+        private set
     init {
         tts.initialize(object : OnInitializeListener {
             override fun onSuccess() { ready = true }

@@ -73,6 +73,22 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/** v2 → v3: 여행 케어(반려견) · 휴식 근거와 경로 옵션(여행). 기존 데이터 유지 */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE pet ADD COLUMN breed TEXT")
+        db.execSQL("ALTER TABLE pet ADD COLUMN senior INTEGER")
+        db.execSQL("ALTER TABLE pet ADD COLUMN brachycephalic INTEGER")
+        db.execSQL("ALTER TABLE pet ADD COLUMN healthCondition TEXT")
+        db.execSQL("ALTER TABLE pet ADD COLUMN vetRestIntervalMinutes INTEGER")
+        db.execSQL("ALTER TABLE pet ADD COLUMN guardianInterval INTEGER NOT NULL DEFAULT 0")
+        // 이전 버전에서 기본값(90)이 아닌 간격은 보호자가 정한 값으로 간주(웹 isGuardianInterval 과 동일)
+        db.execSQL("UPDATE pet SET guardianInterval = 1 WHERE restIntervalMinutes > 0 AND restIntervalMinutes != 90")
+        db.execSQL("ALTER TABLE trip ADD COLUMN restBasis TEXT")
+        db.execSQL("ALTER TABLE trip ADD COLUMN routeComfortable INTEGER NOT NULL DEFAULT 1")
+    }
+}
+
 data class TripStats(val count: Int, val totalKm: Double?, val drivingSeconds: Long?)
 
 @Dao
@@ -86,6 +102,7 @@ interface PetDao {
 abstract class TripDao {
     @Query("SELECT * FROM trip WHERE status = 'ENDED' ORDER BY startTime DESC") abstract fun observeEnded(): Flow<List<TripEntity>>
     @Query("SELECT * FROM trip WHERE status != 'ENDED' LIMIT 1") abstract suspend fun findActive(): TripEntity?
+    @Query("SELECT * FROM visited_place WHERE tripId = :tripId ORDER BY visitedAt") abstract suspend fun places(tripId: String): List<VisitedPlaceEntity>
     @Query("SELECT * FROM trip WHERE id = :id") abstract suspend fun get(id: String): TripEntity?
     @Upsert abstract suspend fun upsert(trip: TripEntity)
     @Insert(onConflict = OnConflictStrategy.IGNORE) abstract suspend fun linkPets(refs: List<TripPetCrossRef>)
@@ -129,7 +146,7 @@ abstract class TripDao {
         PetEntity::class, TripEntity::class, TripPetCrossRef::class, TripLocationEntity::class,
         RestSessionEntity::class, VisitedPlaceEntity::class, TripPhotoEntity::class, DriveLegEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -139,7 +156,7 @@ abstract class MungRoadDatabase : RoomDatabase() {
 
     companion object {
         /** 스키마 변경 시 여기에 Migration 을 추가하고 version 을 올립니다(파괴적 마이그레이션 사용 안 함). */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
         @Volatile private var instance: MungRoadDatabase? = null
         fun get(context: Context): MungRoadDatabase = instance ?: synchronized(this) {

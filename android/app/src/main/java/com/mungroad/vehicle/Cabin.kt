@@ -42,7 +42,18 @@ interface CabinSource {
 
 /** 음성 안내(Pleos TextToSpeech, 없으면 Android TextToSpeech) */
 interface Speaker {
+    /** 초기화가 끝나 말할 수 있는지(Pleos TTS 는 비동기 초기화) */
+    val ready: Boolean get() = true
     fun speak(text: String, interrupt: Boolean = false)
     fun stop()
     fun release()
+}
+
+/** Pleos TTS 가 준비되면 그것을, 아니면(초기화 전·실패) Android TTS 를 씀 */
+class FallbackSpeaker(private val primary: Speaker?, private val secondary: Speaker) : Speaker {
+    private fun pick() = primary?.takeIf { it.ready } ?: secondary
+    override fun speak(text: String, interrupt: Boolean) = pick().speak(text, interrupt)
+    override fun stop() { primary?.stop(); secondary.stop() }
+    override fun release() { primary?.release(); secondary.release() }
+    val usingPleos get() = primary?.ready == true
 }

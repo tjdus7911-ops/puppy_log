@@ -7,6 +7,8 @@ import com.mungroad.data.local.PlaceCategory
 import com.mungroad.domain.TripEngine
 import com.mungroad.vehicle.DemoRoute
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -24,18 +26,39 @@ interface NavigationProvider {
     suspend fun currentRoute(current: GeoPoint?): RouteSnapshot?
     /** 휴식 장소로 안내: 경유지 추가 → 실패 시 목적지 전달 → 실패 시 외부 지도 앱 */
     suspend fun guideTo(name: String, point: GeoPoint, preferWaypoint: Boolean): NavRequestResult
+    /** 내비 이벤트(도착·경로 취소). 지원하지 않으면 빈 흐름 → 화면의 '도착' 버튼으로 진행 */
+    fun events(): Flow<NavEvent> = emptyFlow()
+    /** 경로 옵션 변경(편한 길 ↔ 추천). 지원하지 않으면 false */
+    suspend fun setRouteOption(comfortable: Boolean): Boolean = false
+    /** 추가한 경유지 모두 삭제 */
+    suspend fun clearWaypoints(): Boolean = false
+    /** 경로 안내 종료(여행 완료 시) */
+    suspend fun cancelRoute() {}
+    /** 데모: 돌아오는 길 경로로 바꿈 */
+    fun setReturnLeg(returning: Boolean) {}
+}
+
+sealed interface NavEvent {
+    data class Arrived(val name: String?) : NavEvent
+    data object RouteCancelled : NavEvent
 }
 
 /** 데모: 서울→강릉 고정 경로, ETA 는 남은 거리/평균속도로 추정 */
 class DemoNavigationProvider : NavigationProvider {
     override val provenance = Provenance.DEMO
-    private val dest = Destination("강릉 경포해변", DemoRoute.pointAt(DemoRoute.totalKm).let { GeoPoint(it.first, it.second) })
+    @Volatile private var returning = false
+    private val outDest = Destination("강릉 경포해변", DemoRoute.pointAt(DemoRoute.totalKm).let { GeoPoint(it.first, it.second) })
+    private val homeDest = Destination("집(서울)", DemoRoute.pointAt(0.0).let { GeoPoint(it.first, it.second) })
+    private val dest get() = if (returning) homeDest else outDest
+    override fun setReturnLeg(returning: Boolean) { this.returning = returning }
+    override suspend fun setRouteOption(comfortable: Boolean) = true
+    override suspend fun clearWaypoints() = true
 
     override suspend fun currentRoute(current: GeoPoint?): RouteSnapshot {
         val remaining = current?.let { estimateRemainingKm(it) }
         return RouteSnapshot(
             destination = dest,
-            path = DemoRoute.points.map { GeoPoint(it.first, it.second) },
+            path = DemoRoute.points.map { GeoPoint(it.first, it.second) }.let { if (returning) it.reversed() else it },
             remainingDistanceKm = remaining,
             etaEpochMillis = remaining?.let { System.currentTimeMillis() + (it / 80.0 * 3_600_000).toLong() },
             isEstimated = true,
@@ -45,7 +68,7 @@ class DemoNavigationProvider : NavigationProvider {
 
     private fun estimateRemainingKm(p: GeoPoint): Double {
         // 경로 위 가장 가까운 점부터 끝까지의 거리
-        val pts = DemoRoute.points
+        val pts = if (returning) DemoRoute.points.reversed() else DemoRoute.points
         var bestIdx = 0
         var best = Double.MAX_VALUE
         pts.forEachIndexed { i, q ->

@@ -56,7 +56,8 @@ import com.mungroad.ui.screens.PetsScreen
 import com.mungroad.ui.screens.DashboardScreen
 import com.mungroad.ui.screens.RecordsScreen
 import com.mungroad.ui.screens.SettingsScreen
-import com.mungroad.ui.screens.TripStartScreen
+import com.mungroad.ui.screens.TripSetupScreen
+import com.mungroad.ui.screens.ArrivalScreen
 import com.mungroad.ui.theme.Mung
 import com.mungroad.ui.theme.MungRoadTheme
 
@@ -85,7 +86,13 @@ private fun App(vm: TripViewModel) {
     val voiceAvailable = remember { SpeechRecognizer.isRecognitionAvailable(context) }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
-    LaunchedEffect(Unit) { permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }
+    // 위치 + 차량 속성(외기 온도·시동·기어·차속). Pleos 권한은 설치 시 부여되는 차량 권한이라 여기서 함께 요청합니다.
+    LaunchedEffect(Unit) {
+        permission.launch(arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION,
+            "android.car.permission.CAR_SPEED", "android.car.permission.CAR_POWERTRAIN", "android.car.permission.CAR_EXTERIOR_ENVIRONMENT",
+        ))
+    }
 
     val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val text = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
@@ -115,8 +122,14 @@ private fun App(vm: TripViewModel) {
                         onRecords = { tab = Tab.RECORD },
                         onPlaces = { tab = Tab.MOVE },
                     )
-                    Tab.MOVE -> live?.let { DashboardScreen(it, vm, onEnded = { id -> savedTripId = id; tab = Tab.RECORD }, onVoice = onVoice, voiceAvailable = voiceAvailable) }
-                        ?: TripStartScreen(vm)
+                    Tab.MOVE -> {
+                        val l = live
+                        when {
+                            l == null -> TripSetupScreen(vm, onAddPet = { tab = Tab.PETS })
+                            l.legKind != null -> DashboardScreen(l, vm, onVoice = onVoice, voiceAvailable = voiceAvailable)
+                            else -> ArrivalScreen(l, vm, onSaved = { id -> savedTripId = id; tab = Tab.RECORD })
+                        }
+                    }
                     Tab.PETS -> PetsScreen(vm, onStartTrip = { tab = Tab.MOVE })
                     Tab.RECORD -> RecordsScreen(vm, savedTripId)
                     Tab.SETTINGS -> SettingsScreen(vm)
