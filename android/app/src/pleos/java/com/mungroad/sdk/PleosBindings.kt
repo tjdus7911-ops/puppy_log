@@ -148,7 +148,7 @@ private class PleosCabinSource(context: Context) : CabinSource {
         }
         runCatching { vehicle.getHVAC().registerHvacAcState(driverSeat, acListener) }
         val turnListener = object : TurnSignalStateListener {
-            override fun onTurnSignalStateUpdated(v: TurnSignalValue) { emit(s.copy(turnSignal = v == TurnSignalValue.LEFT || v == TurnSignalValue.RIGHT)) }
+            override fun onTurnSignalStateUpdated(v: TurnSignalValue?) { emit(s.copy(turnSignal = v == TurnSignalValue.LEFT || v == TurnSignalValue.RIGHT)) }
             override fun onFailed(e: Exception) {}
         }
         runCatching { vehicle.getTurnSignal().registerTurnSignalState(turnListener) }
