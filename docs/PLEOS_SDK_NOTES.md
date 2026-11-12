@@ -1,5 +1,7 @@
 # Pleos Connect SDK 조사 메모
 
+> 2026-11-12: 실제 AAR 의 public API 로 시그니처를 확인했어요 → [PLEOS_SDK_API.md](PLEOS_SDK_API.md). 아래 'TODO(verify-sdk)' 항목 중 NaviHelper·Vehicle(창문·문·에어컨·방향지시등)·TTS 는 해결됐습니다.
+
 조사일 2026-11-11. 공식 문서(document.pleos.ai, pleos.ai/playground) 중 이 개발 환경에서 열람 가능했던 범위만 정리했습니다.
 **문서에서 확인하지 못한 함수·필드는 코드에 쓰지 않았고**, 필요한 곳은 `TODO(verify-sdk)`로 남겼습니다.
 
