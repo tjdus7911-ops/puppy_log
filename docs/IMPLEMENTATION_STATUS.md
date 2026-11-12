@@ -6,7 +6,7 @@
 | 항목 | 상태 | 근거 |
 |---|---|---|
 | 웹 프로토타입 (`web/`) | ✅ | `tsc` 통과, 빌드 통과, 단위 테스트 25개(라이프사이클·v1→v2 마이그레이션 포함), Chrome E2E 전체 여행 흐름 22단계 통과, 콘솔 오류 0 |
-| Android 앱 (`android/`) | 🟡 **미빌드** | 개발 환경에서 Android SDK·Gradle·Maven 저장소 접근 불가. Gradle Wrapper·빌드 설정·코드는 작성했지만 한 번도 컴파일하지 않음 → [ANDROID_SETUP.md](ANDROID_SETUP.md) |
+| Android 차량 앱 (`android/`) | ✅ 빌드·에뮬레이터 실행 | GitHub Actions: 스텁 빌드 + Pleos SDK 빌드(APK `mungroad-pleos-debug`) + 단위 테스트(휴식 기준표·탑승 안전 규칙), 에뮬레이터(API 34, 1920×1080)에서 데모 여행 전체 흐름 스모크 테스트 통과(`.github/workflows/android-smoke.yml`). 실차·Pleos Connect Emulator 동작은 미검증 |
 | 프록시 서버 (`server/`) | 🟡 | 라우팅·키 미설정 시 503·유형 분류 확인. 카카오·ITS·Anthropic 실호출은 미검증 |
 
 ## 기능별 (웹 프로토타입)
@@ -177,16 +177,20 @@ Figma: 멍로드 MUNG ROAD — UI 리디자인 시안 v1 (디자인 시스템 + 
 | 완료 후 사진·일기 추가 시 통계 유지 | ✅ | E2E 21단계 |
 | 차량 앱 ↔ 모바일 앱 동기화 | ⬜ **미구현** | 서버 없음. 모든 기록은 기기 로컬(`syncState: 'local-only'`) |
 
-## Android (모두 🟡 미빌드)
-| 항목 | 내용 |
-|---|---|
-| 빌드 구성 | Gradle Wrapper 8.10.2, AGP 8.7.3, Kotlin 2.0.21, KSP, Compose BOM 2024.12.01, minSdk 28, compileSdk 35 |
-| 플래그 | `mungroad.usePleosSdk`, `mungroad.useKakaoMap` — 끄면 SDK 코드를 컴파일하지 않고 Stub 사용 |
-| 키 주입 | `local.properties` → BuildConfig(`KAKAO_NATIVE_APP_KEY`, `MUNGROAD_API_BASE_URL`). REST·ITS·AI 키는 앱에 넣지 않음 |
-| Provider | VehicleDataProvider(Demo·AndroidLocation·Pleos AAOS), NavigationProvider(Demo·Manual·Pleos TODO), TrafficInfoProvider(Demo·Proxy), PetPlaceProvider(Sample·KakaoProxy), TravelDiaryService |
-| 데이터 | Room v2: 8개 테이블(+`drive_leg`)·DAO, `TripPhase`/`LegKind`, Migration 1→2(데이터 보존, 웹 변환 규칙과 동일) |
-| UI | Compose: 사이드 내비 + 상태 바, 주행 대시보드, 여행 시작, 기록, 커뮤니티(준비 중), 설정(연동 상태 표시) |
-| 미구현 | TripViewModel 의 단계 전환(현재는 v1 흐름: 도착 = 종료) — 웹 TripController 와 같은 구조로 이식 예정, 포그라운드 서비스, 반려견 사진·프로필 편집, 사진·공유·발도장 Compose 이식, NaviHelper 호출부(시그니처 확인 후) |
+## Android 차량 앱 (v1.4 · 2026-11-12)
+| 항목 | 상태 | 내용 |
+|---|---|---|
+| 여행 흐름 | ✅ | 3단계 준비(반려견 여러 마리·목적지·확인) → 주행 → 도착(종료 아님) → 여행지 기록 → 돌아오는 길 → 여행 완료 · 구간(DriveLeg) 저장 |
+| 반려견 맞춤 휴식 | ✅ | 기준표(초안) · 수의사 간격 · 보호자 간격 · 여러 마리 중 가장 짧은 간격, '곧 휴식'은 카드, 휴식 시간에는 창(찾기·나중에·휴식 시작) |
+| 휴식 경유지 추천 | ✅ 🧪 | 휴식 10분 전 장소 추천 → 경유지 추가(NaviHelper `addWaypoint`, 실패 시 목적지) · 샘플 장소는 안내하지 않음 |
+| 탑승 안전 안내 | ✅ 🧪 | 뒷창·더위(에어컨 켜기 동의 시만 제어)·뒷문 휴식 확인·내리기 전 확인·펫 모드 켜는 방법(실행 안 함) · 방향지시등 중 음성 보류 |
+| 여행 정보 수정 | ✅ | 목적지·편한 길·경유지 지우기·휴식 간격, 실차 주행 중 잠금 |
+| Pleos NaviHelper | 🟡 | `requestRoute`(편한 길) · `addWaypoint` · `removeWaypoint(ALL)` · `changeRouteOption` · `cancelRoute` · `onDrivingInfo`(남은 거리·시간) · `onDestinationArrived`(도착) — 컴파일 확인, 실제 동작 미검증 |
+| Pleos Vehicle | 🟡 | Window·Door·HVAC(상태·켜기)·TurnSignal, 도메인별 지원 확인 후 미지원 안내만 끔 |
+| AAOS 속성 | 🟡 | 기어·차속·외기 온도·시동·주차 브레이크(CarPropertyManager) |
+| 음성 | 🟡 | Pleos TextToSpeech(HYBRID) 준비되면 사용, 아니면 Android TTS · 안전 → 휴식 → 장소 → 정보 순 |
+| 데이터 | ✅ | Room v3(반려견 여행 케어 · 휴식 근거 · 경로 옵션), Migration 1→2→3(데이터 보존) |
+| 남은 일 | ⬜ | 포그라운드 서비스, 사진·일기 Compose(휴대폰 앱 담당), FusedLocation SDK, 서명된 release APK |
 
 ## 요청서 16장 작업 순서 대비
 | 단계 | 결과 |

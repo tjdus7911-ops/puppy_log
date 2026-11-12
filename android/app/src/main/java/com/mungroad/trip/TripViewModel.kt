@@ -509,7 +509,7 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             if (!cur.isDemo && destination.point != null && nav != null) {
                 val r = nav.guideTo(destination.name, destination.point, preferWaypoint = false)
                 msgs += if (r is NavRequestResult.Failed) r.reason else "목적지를 ${destination.name}(으)로 바꿨어요."
-            } else msgs += "목적지를 ${destination.name}(으)로 바꿨어요."
+            } else msgs += if (cur.isDemo) "목적지를 ${destination.name}(으)로 바꿨어요. 데모 주행 경로는 그대로예요." else "목적지를 ${destination.name}(으)로 바꿨어요. 차량 내비에서도 확인해 주세요."
             db.tripDao().get(cur.tripId)?.let { db.tripDao().upsert(it.copy(destinationName = destination.name, updatedAt = System.currentTimeMillis())) }
         }
         if (comfortable != cur.routeComfortable) {
