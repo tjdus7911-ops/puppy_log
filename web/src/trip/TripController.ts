@@ -366,6 +366,25 @@ export class TripControllerImpl {
     });
   }
 
+  /**
+   * 여행 중 정보 수정(목적지·경로 옵션·경유지). 실제 차량은 NaviHelper requestRoute/changeRouteOption/removeWaypoint 로 전달.
+   * 수정 내역은 trip.infoEdits 에 남깁니다.
+   */
+  async updateTripInfo(patch: { destinationName?: string | null; destination?: GeoPoint | null; routeOption?: RouteOption; plannedWaypoints?: PlannedWaypoint[] }) {
+    if (!this.trip) return;
+    const fields = Object.keys(patch).filter((k) => (patch as Record<string, unknown>)[k] !== undefined);
+    if (!fields.length) return;
+    this.trip = {
+      ...this.trip, ...patch,
+      infoEdits: [...(this.trip.infoEdits ?? []), { at: this.engine?.lastTick ?? Date.now(), fields }].slice(-50),
+    };
+    // 목적지를 바꾸면 도착 판정을 다시 함(실제 위치 구간)
+    if (patch.destination !== undefined && this.leg?.kind === 'outbound' && !(this.provider instanceof DemoVehicleDataProvider)) this.arrived = false;
+    try { await repo.saveTrip(this.trip); } catch (e) { this.lastError = (e as Error).message; }
+    this.emit(true);
+    void this.persist();
+  }
+
   async saveMemo(memo: string) {
     if (!this.trip) return;
     this.trip = { ...this.trip, memo };

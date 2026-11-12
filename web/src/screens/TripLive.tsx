@@ -1,7 +1,7 @@
 // SCREEN 01 — 주행 중 메인 대시보드 (시안: 좌 반려견 카드 | 중앙 지도 | 우 휴식 장소 추천 + 음성 명령)
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  BellRing, Camera, Car, Check, ChevronRight, Clock3, Coffee, Flag, FlaskConical, Fuel, Lock, MapPin, Mic, Navigation, PawPrint, Plus, Stethoscope,
+  BellRing, Camera, Pencil, Car, Check, ChevronRight, Clock3, Coffee, Flag, FlaskConical, Fuel, Lock, MapPin, Mic, Navigation, PawPrint, Plus, Stethoscope,
   Satellite, Timer, TriangleAlert, Wind, Thermometer, DoorOpen, Snowflake, Hand,
 } from 'lucide-react';
 import { TripController } from '../trip/TripController';
@@ -9,11 +9,11 @@ import { useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { useWide } from '../app/useWide';
 import { formatClock, formatDuration, formatKm } from '../domain/format';
-import { regionLabel } from '../domain/regions';
+import { REGIONS, regionLabel } from '../domain/regions';
 import { callName, josa, petNames as joinNames } from '../domain/tripText';
 import { haversineKm } from '../domain/geo';
 import { aheadOnRoute } from '../domain/autoReco';
-import { mapJsKey, newId, type GeoPoint, type PlaceCategory, ROUTE_OPTION_LABEL } from '../domain/models';
+import { mapJsKey, newId, type GeoPoint, type PlaceCategory, ROUTE_OPTION_LABEL, type RouteOption, type PlannedWaypoint } from '../domain/models';
 import { repo } from '../data/db';
 import { DEMO_RETURN_ROUTE, DEMO_ROUTE, DEMO_ROUTES } from '../vehicle/demoRoute';
 import { getPlaceProvider, sortByDistance } from '../places/providers';
@@ -108,6 +108,11 @@ export default function TripLive() {
   const [intervalSheet, setIntervalSheet] = useState(false);
   const [stateSheet, setStateSheet] = useState(false);
   const [petModeSheet, setPetModeSheet] = useState(false);
+  const [editSheet, setEditSheet] = useState(false);
+  const [editQ, setEditQ] = useState('');
+  const [editDest, setEditDest] = useState<{ name: string; point: GeoPoint } | null>(null);
+  const [editRoute, setEditRoute] = useState<RouteOption>('comfort');
+  const [editWps, setEditWps] = useState<PlannedWaypoint[]>([]);
   const [placeDetail, setPlaceDetail] = useState<RouteRec | null>(null);
   const [changeReason, setChangeReason] = useState<IntervalChangeReason>('pet-condition');
   const placeVoiceDone = useRef<string>('');
@@ -434,6 +439,22 @@ export default function TripLive() {
   const mainPetName = live.petNames[0] ?? '우리 강아지';
   const basisLabel = live.trip.restIntervalChanges?.length ? '여행 중 조정' : live.trip.restPolicy ? (live.trip.restPolicy.basis === 'guideline' ? '기준표 추천' : BASIS_LABEL[live.trip.restPolicy.basis]) : '보호자 설정';
   const findRestPlace = () => { TripController.logRestResponse('find'); setRestSheet(['restArea', 'park']); };
+  const openEdit = () => {
+    setEditQ(''); setEditDest(null);
+    setEditRoute(live.trip?.routeOption ?? 'comfort');
+    setEditWps(live.trip?.plannedWaypoints ?? []);
+    setEditSheet(true);
+  };
+  const editLocked = driving && !isDemo;
+  const saveEdit = async () => {
+    await TripController.updateTripInfo({
+      ...(editDest ? { destinationName: editDest.name, destination: editDest.point } : {}),
+      routeOption: editRoute,
+      plannedWaypoints: editWps,
+    });
+    setEditSheet(false);
+    toast(isDemo ? '여행 정보를 바꿨어요 · 데모: 실제 차량은 내비(편한 길·경유지)에 전달돼요' : '여행 정보를 바꿨어요. 내비 연동 차량은 경로를 다시 찾아요.');
+  };
   const remindLater = () => { TripController.logRestResponse('later'); TripController.snoozeReminder(15); toast('15분 뒤에 다시 알려드릴게요.'); };
 
   // ── 반려견 탑승 안전 안내(차량 상태): 한 번에 하나, 휴식 카드 자리에 대신 표시 ──
@@ -521,6 +542,7 @@ export default function TripLive() {
             </ul>
             {cabinRow}
             <button className={`cd-voice ${voice.listening ? 'listening' : ''}`} onClick={onVoice}><Mic size={20} />음성 명령<span>“가까운 휴게소 찾아줘”</span></button>
+            {dash !== 'arrived' && <button className="cd-edit" onClick={openEdit} data-testid="trip-edit"><Pencil size={18} />여행 정보 수정<span>목적지 · 경로 · 경유지 · 휴식 간격</span></button>}
             {voice.text && <p className="voice-line">{voice.text}</p>}
             {notices}
             {details}
@@ -529,7 +551,7 @@ export default function TripLive() {
           {dash === 'arrived' ? (
             <section className="arr" aria-label="목적지 도착">
               <div className="arr-hero">
-                <TripScene id={sceneId} />
+                <TripScene id={isReturn ? 'sunset' : sceneId} />
                 <div className="arr-title"><MapPin size={28} /><h1>{shortDest(isReturn ? '집' : live.trip.destinationName ?? '목적지')}{isReturn ? '에 돌아왔어요!' : '에 도착했어요!'}</h1></div>
                 <span className="arr-src">{isDemo ? '데모 시뮬레이션 도착 · 실제 차량에서는 내비 도착 신호로 전환' : 'GPS 위치 기준 도착 확인'}</span>
               </div>
@@ -540,11 +562,11 @@ export default function TripLive() {
                   <div><span><Coffee size={16} />휴식 횟수</span><b className="num">{e.restCount}<small>회</small></b></div>
                   <div><span><PawPrint size={16} />함께한 반려견</span><b className="arr-pets">{tripPets.length ? tripPets.map((p) => <PetAvatar key={p.id} uri={p.photoUri} size={30} />) : null}<em>{joinNames(live.petNames)}</em></b></div>
                 </div>
-                <p className="arr-note leave">내리기 전에 {callName(mainPetName)}를 함께 내렸는지 확인해 주세요.{live.cabinCaps.petMode ? ' 잠깐 두고 내리면 펫 모드를 켜 주세요.' : ''} <button className="link" onClick={() => setPetModeSheet(true)}>펫 모드 안내</button></p>
-                <p className="arr-note">{isReturn ? '여행 완료를 누르면 기록이 확정되고 AI 여행 일기 초안이 만들어져요.' : '여행은 끝나지 않아요 · 여행지 활동(사진·방문 장소·메모)으로 이어져요. 전체 종료는 ‘여행 마무리’에서 해요.'}</p>
-                <div className="arr-acts">
+                <p className="arr-note">{isReturn ? '여행 완료를 누르면 가는 길·여행지·오는 길 기록이 하나로 저장되고 AI 여행 일기 초안이 만들어져요.' : '여행은 끝나지 않아요 · 여행지 활동(사진·방문 장소·메모)으로 이어져요.'}</p>
+                <p className="arr-note leave"><PawPrint size={14} />내리기 전에 {callName(mainPetName)}를 함께 내렸는지 확인해 주세요{live.cabinCaps.petMode ? ' · 잠깐 두고 내릴 땐' : ''} <button className="link" onClick={() => setPetModeSheet(true)}>펫 모드 켜는 법</button></p>
+                <div className={`arr-acts ${isReturn ? 'single' : ''}`}>
                   {isReturn ? (
-                    <button className="ca deep" disabled={ending} onClick={finish}><Flag size={20} /><span>여행 완료</span></button>
+                    <button className="ca deep" disabled={ending} onClick={finish} data-testid="finish-trip"><Flag size={20} /><span>{ending ? '저장 중…' : '여행 완료 · 기록 저장'}</span></button>
                   ) : (
                     <>
                       <button className="ca deep" disabled={ending} onClick={arrive}><Camera size={20} /><span>여행지 활동 기록</span></button>
@@ -585,7 +607,9 @@ export default function TripLive() {
         </div>
 
         <footer className="cd-actions five">
-          {naviMode === 'demo' ? (
+          {dash === 'arrived' ? (
+            <div className="ca status" role="status"><Navigation size={20} /><span>경로 안내 종료<small>{isReturn ? '집 도착' : '목적지 도착'}</small></span></div>
+          ) : naviMode === 'demo' ? (
             <div className="ca primary status-nav" role="status"><Navigation size={20} /><span>경로 안내 중<small>데모 내비</small></span></div>
           ) : naviMode === 'link' ? (
             <button className="ca primary" onClick={() => { const d = live.trip!.destination!; const r = openNavigation(toLabel, d.latitude, d.longitude, false); if (!r.ok) toast(r.message!, 'error'); }}><Navigation size={20} /><span>경로 안내<small>지도 앱 · 내장 내비 미연동</small></span></button>
@@ -719,6 +743,48 @@ export default function TripLive() {
             </button>
           ))}
         </div>
+      </Sheet>
+
+      <Sheet open={editSheet} onClose={() => setEditSheet(false)} labelledBy="edit-title">
+        <h2 id="edit-title" className="h-md">여행 정보 수정</h2>
+        {editLocked ? (
+          <div className="hint mt-16"><Lock size={15} />주행 중에는 정보를 바꿀 수 없어요. 정차 후 이용하거나 음성 명령을 써 주세요.</div>
+        ) : (
+          <div className="edit-grid mt-12" data-testid="trip-edit-sheet">
+            {!isReturn && (
+              <section>
+                <p className="ed-h">목적지</p>
+                <p className="t-sub">지금: <b>{editDest?.name ?? live.trip?.destinationName ?? '목적지 미설정'}</b>{editDest && <button className="link" style={{ marginLeft: 8 }} onClick={() => setEditDest(null)}>되돌리기</button>}</p>
+                <input className="input mt-8" value={editQ} onChange={(e) => setEditQ(e.target.value)} placeholder="새 목적지 검색 (지역)" aria-label="새 목적지 검색" />
+                <div className="ed-cands">
+                  {REGIONS.filter((r) => (editQ.trim() ? r.name.includes(editQ.trim()) || r.province.includes(editQ.trim()) : ['sokcho', 'yangyang', 'gangneung', 'pyeongchang'].includes(r.id))).slice(0, 6).map((r) => (
+                    <button key={r.id} className={`chip ${editDest?.name === r.name ? 'on' : ''}`} onClick={() => setEditDest({ name: r.name, point: r })}>{r.province} {r.name}</button>
+                  ))}
+                </div>
+                {isDemo && <p className="t-cap mt-4">데모: 가상 주행 경로는 강릉 고정이라 이름·지도 표시만 바뀌어요.</p>}
+              </section>
+            )}
+            <section>
+              <p className="ed-h">경로 옵션</p>
+              <div className="chips">{(['comfort', 'fast'] as RouteOption[]).map((o) => <button key={o} className={`chip ${editRoute === o ? 'on' : ''}`} onClick={() => setEditRoute(o)}>{ROUTE_OPTION_LABEL[o]}{o === 'comfort' ? ' · 반려견 추천' : ''}</button>)}</div>
+            </section>
+            <section>
+              <p className="ed-h">경유지</p>
+              {editWps.length === 0 ? <p className="t-cap">출발 전 넣은 경유지가 없어요. 추천 카드의 ＋로 추가할 수 있어요.</p> : editWps.map((w) => (
+                <div key={w.name} className="row between ed-wp"><span>{w.name}{w.isSample ? ' (샘플)' : ''} <small className="t-cap">약 {w.atMinute}분 지점</small></span><button className="btn ghost sm" onClick={() => setEditWps(editWps.filter((x) => x.name !== w.name))}>빼기</button></div>
+              ))}
+            </section>
+            <section>
+              <p className="ed-h">휴식 알림 간격</p>
+              <div className="row between"><span><b>{e.restIntervalMin}분</b> <small className="t-cap">{basisLabel}</small></span><button className="btn ghost sm" onClick={() => { setEditSheet(false); setIntervalSheet(true); }}>바꾸기</button></div>
+            </section>
+            <section>
+              <p className="ed-h">함께 탄 반려견</p>
+              <p className="t-sub">{joinNames(live.petNames)} <small className="t-cap">· 반려견 변경은 다음 여행부터 적용돼요</small></p>
+            </section>
+          </div>
+        )}
+        {!editLocked && <button className="btn primary block mt-16" onClick={saveEdit}>저장</button>}
       </Sheet>
 
       <Sheet open={petModeSheet} onClose={() => setPetModeSheet(false)} labelledBy="pm-title">

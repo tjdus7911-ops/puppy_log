@@ -1782,3 +1782,17 @@ button.place-row { cursor: pointer; }
 .ios-steps li { display: flex; align-items: center; gap: 12px; font-size: 15px; }
 .ios-steps li span { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); flex: none; overflow: hidden; }
 .ios-steps li span img { width: 100%; height: 100%; }
+/* 여행 정보 수정 */
+.cd-edit { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; padding: 10px 14px; border: 0; border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); text-align: left; font-weight: 700; font-size: 15px; color: var(--text); cursor: pointer; }
+.cd-edit svg { grid-row: span 2; width: 38px; height: 38px; padding: 10px; border-radius: 12px; background: var(--primary-soft); color: var(--primary); box-sizing: border-box; }
+.cd-edit span { font-size: 12px; font-weight: 500; color: var(--text-2); }
+.edit-grid { display: grid; gap: 16px; }
+.edit-grid section { display: grid; gap: 6px; padding-bottom: 14px; border-bottom: 1px solid var(--line, #e6ebf3); }
+.edit-grid section:last-child { border-bottom: 0; padding-bottom: 0; }
+.ed-h { font-size: 13px; font-weight: 700; color: var(--text-2); }
+.ed-cands { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.ed-wp { padding: 6px 0; }
+/* 도착 화면 정리 */
+.arr-acts.single { grid-template-columns: minmax(0, 460px); justify-content: center; }
+.arr-note.leave { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--primary); font-weight: 600; }
+.arr-note.leave .link { font-weight: 700; }

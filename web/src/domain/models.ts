@@ -116,6 +116,8 @@ export interface Trip {
   routeOption?: RouteOption;
   /** 출발 전 경유지로 넣은 추천 휴식지 */
   plannedWaypoints?: PlannedWaypoint[];
+  /** 여행 중 정보 수정 기록(목적지·경로 옵션·경유지) */
+  infoEdits?: { at: number; fields: string[] }[];
   placeSuggestLog?: PlaceSuggestEntry[];
 }
 

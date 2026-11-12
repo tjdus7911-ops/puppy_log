@@ -117,6 +117,20 @@ try {
     return '휴대폰: 홈(진행 중 카드·하단 메뉴) ↔ “차량에서 기록 중” 상태 화면';
   });
 
+  await step('차량: 여행 정보 수정(경로 옵션·경유지)', async () => {
+    await page.locator('[data-testid=trip-edit]').click();
+    const sheet = page.locator('[data-testid=trip-edit-sheet]');
+    await sheet.waitFor();
+    await sheet.locator('.chip', { hasText: '빠른 길' }).click();
+    await btn('저장', true).click();
+    await page.locator('.cd-dog .s', { hasText: '빠른 길' }).waitFor();
+    await page.locator('[data-testid=trip-edit]').click();
+    await sheet.locator('.chip', { hasText: '편한 길' }).click();
+    await btn('저장', true).click();
+    await page.locator('.cd-dog .s', { hasText: '편한 길' }).waitFor();
+    return '빠른 길 → 편한 길로 바꿔 저장';
+  });
+
   await step('휴식 10분 전: 팝업 없이 휴식 카드', async () => {
     await page.locator('.rest-line.soon').waitFor({ timeout: 60000 });
     await shot('04-reminder-soon');
