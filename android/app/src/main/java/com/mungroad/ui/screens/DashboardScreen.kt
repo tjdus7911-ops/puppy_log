@@ -189,7 +189,7 @@ fun DashboardScreen(live: LiveUi, vm: TripViewModel, onVoice: () -> Unit, voiceA
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text("음성 명령", fontWeight = FontWeight.SemiBold)
-                        Text(if (voiceAvailable) "\"가까운 휴게소 찾아줘\" · \"휴식 얼마나 남았어\"" else "음성 인식 미지원 · 데모 명령 실행", fontSize = 13.sp, color = Mung.TextSecondary)
+                        Text(if (voiceAvailable) "\"가까운 휴게소 찾아줘\"" else "음성 인식 미지원 · 데모 명령 실행", fontSize = 13.sp, color = Mung.TextSecondary)
                     }
                 }
             }
@@ -328,7 +328,7 @@ private fun TripEditDialog(live: LiveUi, onClose: () -> Unit, onSave: (Destinati
                     Text("${interval}분", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     TextButton(onClick = { interval = (interval + 15).coerceAtMost(RestCare.MAX_INTERVAL) }) { Text("+15") }
                 }
-                Text("휴식 간격을 바꾸면 이번 여행은 보호자 설정으로 적용돼요.", fontSize = 13.sp, color = Mung.TextSecondary)
+                Text("휴식 간격을 바꾸면 이번 여행은 보호자 설정으로 적용돼요. 실제 주행 중에는 잠겨요.", fontSize = 13.sp, color = Mung.TextSecondary)
             }
         },
         confirmButton = { TextButton(onClick = { onSave(region?.let { Destination(it.name, it.point) }, comfortable, interval, removeWp) }) { Text("저장") } },

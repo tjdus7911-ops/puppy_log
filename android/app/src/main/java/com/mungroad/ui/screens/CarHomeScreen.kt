@@ -128,7 +128,7 @@ fun CarHomeScreen(
             }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 MenuTile(Icons.Outlined.Place, "여행 계획", "(목적지 · 경로)", Modifier.weight(1f), onStartTrip)
-                MenuTile(Icons.Outlined.Pets, "내 반려견", "(프로필 · 설정)", Modifier.weight(1f), onPets)
+                MenuTile(Icons.Outlined.Pets, "내 반려견", "(프로필 · 여행 케어)", Modifier.weight(1f), onPets)
             }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 MenuTile(Icons.Outlined.History, "여행 기록", "(이동 · 휴식 · 방문)", Modifier.weight(1f), onRecords)

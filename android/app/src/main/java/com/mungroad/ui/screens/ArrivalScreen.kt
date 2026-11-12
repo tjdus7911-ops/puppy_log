@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -69,7 +70,17 @@ fun ArrivalScreen(live: LiveUi, vm: TripViewModel, onSaved: (String) -> Unit) {
                 }
             }
             live.cabinPrompt?.let { CabinPromptCard(it, live, vm) }
-            if (live.isDemo) DemoCabinPanel(vm)
+            if (atHome && live.legs.isNotEmpty()) {
+                MCard(Modifier.fillMaxWidth()) {
+                    Text("오늘의 여행", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Spacer(Modifier.height(6.dp))
+                    live.legs.forEach { l ->
+                        val label = when (l.kind) { com.mungroad.data.local.LegKind.OUTBOUND -> "가는 길"; com.mungroad.data.local.LegKind.RETURN -> "돌아오는 길"; else -> "여행지 이동" }
+                        LegRow(label, "${l.km.toInt()} km · 휴식 ${l.rests}번")
+                        if (l.kind == com.mungroad.data.local.LegKind.OUTBOUND && live.visited.isNotEmpty()) LegRow("여행지", live.visited.joinToString(" · "))
+                    }
+                }
+            }
             if (!atHome) {
                 MCard(Modifier.fillMaxWidth()) {
                     Text("여행지 기록", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -86,6 +97,7 @@ fun ArrivalScreen(live: LiveUi, vm: TripViewModel, onSaved: (String) -> Unit) {
                     BigButton("기록 남기기", enabled = record.isNotBlank()) { vm.recordPlace(record.trim()); record = "" }
                 }
             }
+            if (live.isDemo) DemoCabinPanel(vm)
         }
         Column(Modifier.weight(0.45f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             if (!atHome) {
@@ -118,4 +130,13 @@ fun ArrivalScreen(live: LiveUi, vm: TripViewModel, onSaved: (String) -> Unit) {
         )
     }
     live.notice?.let { n -> AlertDialog(onDismissRequest = { vm.clearNotice() }, confirmButton = { TextButton(onClick = { vm.clearNotice() }) { Text("확인") } }, text = { Text(n) }) }
+}
+
+@Composable
+private fun LegRow(label: String, value: String) {
+    Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Pill(label)
+        Spacer(Modifier.width(10.dp))
+        Text(value, fontSize = 16.sp, color = Mung.Text)
+    }
 }

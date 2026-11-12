@@ -64,7 +64,6 @@ fun PetsScreen(vm: TripViewModel, onStartTrip: () -> Unit) {
                         Text(listOfNotNull(petLine(p), p.breed).joinToString(" · "), fontSize = 15.sp, color = Mung.TextSecondary)
                         Text("휴식 알림 ${min}분 · ${basis.label}", fontSize = 14.sp, color = Mung.Primary)
                     }
-                    if (!locked) Text("수정 ›", color = Mung.Primary, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

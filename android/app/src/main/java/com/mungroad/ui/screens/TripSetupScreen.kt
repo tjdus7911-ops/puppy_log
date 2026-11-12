@@ -115,10 +115,16 @@ fun TripSetupScreen(vm: TripViewModel, onAddPet: () -> Unit) {
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(p.name, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                                    Text("휴식 ${min}분 · ${basis.label}", fontSize = 14.sp, color = Mung.TextSecondary)
+                                    Text("휴식 ${min}분 · ${basis.label}" + if (RestCare.stage(p) == RestCare.Stage.SENIOR) " · 노령견" else "", fontSize = 14.sp, color = Mung.TextSecondary)
                                 }
                                 Text(if (on) "✓" else "", fontSize = 22.sp, color = Mung.Primary, fontWeight = FontWeight.Bold)
                             }
+                        }
+                    }
+                    if (selPets.size > 1) {
+                        MCard(Modifier.fillMaxWidth(), color = Mung.PrimaryLight) {
+                            Text("여러 마리면 가장 짧은 간격으로 알려요", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                            Text(selPets.joinToString(", ") { "${it.name} ${RestCare.petInterval(it).first}분" } + " → 이번 여행은 ${policy.intervalMinutes}분마다 휴식 알림", fontSize = 15.sp, color = Mung.TextSecondary)
                         }
                     }
                     BigButton("다음", Icons.Outlined.ArrowForward, enabled = chosen.isNotEmpty()) { step = 1 }
@@ -149,7 +155,7 @@ fun TripSetupScreen(vm: TripViewModel, onAddPet: () -> Unit) {
                     val estKm = destPoint?.let { d -> home?.point?.let { h -> TripEngine.haversineKm(h.lat, h.lng, d.lat, d.lng) * 1.3 } }
                     val estMin = estKm?.let { it / 80.0 * 60 }
                     val rests = estMin?.let { (it / policy.intervalMinutes).toInt() }
-                    Text("${Korean.petNames(selPets.map { it.name })}${Korean.josa(Korean.petNames(selPets.map { it.name }), "과", "와")} $destName", style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+                    Text("${Korean.petNames(selPets.map { it.name })}, $destName", style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
                     MCard(Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("휴식 알림", Modifier.weight(1f), fontSize = 18.sp)

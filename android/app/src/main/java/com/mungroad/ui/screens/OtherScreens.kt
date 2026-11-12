@@ -51,10 +51,14 @@ import com.mungroad.ui.theme.Mung
 fun RecordsScreen(vm: TripViewModel, highlightId: String?) {
     val trips by vm.trips.collectAsState()
     if (trips.isEmpty()) {
-        Column(Modifier.fillMaxSize().padding(24.dp)) { Text("아직 여행 기록이 없어요.", fontSize = 18.sp) }
+        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("여행 기록", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+            Text("아직 여행 기록이 없어요. 여행을 완료하면 여기에 쌓여요.", fontSize = 18.sp)
+        }
         return
     }
     LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item { Text("여행 기록", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium) }
         items(trips) { t -> TripRecordCard(t, highlight = t.id == highlightId) }
     }
 }

@@ -85,6 +85,8 @@ enum class DemoCabinEvent(val label: String) {
     WINDOW("뒷창 열기"), HEAT("더운 날(31℃)"), REST_AREA_DOOR("휴게소 정차·뒷문"), TURN_SIGNAL("방향지시등"), ENGINE_OFF("시동 끄기")
 }
 
+data class LegSummary(val kind: LegKind, val km: Double, val rests: Int)
+
 data class Reminder(val due: Boolean, val drivenMinutes: Int, val minutesLeft: Int)
 
 /** 휴식 중 반려견이 차에 남는지(펫 모드 안내) */
@@ -123,6 +125,10 @@ data class LiveUi(
     val doneDrivingSec: Double,
     val doneRests: Int,
     val notice: String?,
+    /** 끝난 구간 요약(집 도착 화면 '오늘의 여행') */
+    val legs: List<LegSummary> = emptyList(),
+    /** 여행지에서 남긴 장소 기록 */
+    val visited: List<String> = emptyList(),
 ) {
     val petNames: List<String> get() = pets.map { it.name }
     val petCall: String get() = Korean.petNames(petNames)
@@ -580,7 +586,7 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         provider = null
         _live.update {
             it?.copy(
-                legKind = null, doneKm = it.doneKm + e.distanceKm, doneDrivingSec = it.doneDrivingSec + e.drivingSec, doneRests = it.doneRests + e.restCount,
+                legKind = null, legs = it.legs + LegSummary(kind, e.distanceKm, e.restCount), doneKm = it.doneKm + e.distanceKm, doneDrivingSec = it.doneDrivingSec + e.drivingSec, doneRests = it.doneRests + e.restCount,
                 reminder = null, suggestedPlace = null,
                 // 주행 중 안내(창문·더위·뒷문 휴식)는 도착하면 닫음. '내리기 전 확인'만 남김
                 cabinPrompt = it.cabinPrompt?.takeIf { p -> p.kind == CabinPromptKind.LEAVE_CHECK },
@@ -635,6 +641,7 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
         val cur = _live.value ?: return@launch
         val pt = cur.current ?: cur.destination?.point ?: return@launch
         db.tripDao().upsertPlace(VisitedPlaceEntity(UUID.randomUUID().toString(), cur.tripId, name, PlaceCategory.PARK, pt.lat, pt.lng, System.currentTimeMillis(), cur.isDemo, origin = "USER"))
+        _live.update { it?.copy(visited = it.visited + name) }
         notice("'$name'을(를) 여행 기록에 남겼어요.")
     }
 
