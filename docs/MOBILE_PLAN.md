@@ -121,3 +121,10 @@
 | 권한 | 카메라·사진(Android 13+ 세분화 권한, iOS PhotoKit), 위치(사용 중), 알림(Android 13+ 런타임) | 거부 시 대체 흐름 유지(이미 웹에 있음) |
 | 심사 | UGC 앱: 신고·차단·이용약관·운영 연락처 필수(App Store 1.2) | 운영자 기능 P4 전에 최소 신고 처리 경로 필요 |
 | 차량 연동 | Pleos 계정/차량 인증 방식 확인 필요 | 확인 전에는 ‘차량 연결’ 화면을 데모로만 표시 |
+
+## 설치형 앱(PWA) — 2026-11-12 결정
+모바일 동반 앱은 지금 웹 앱을 설치형(PWA)으로 제공합니다. 차량 앱(Android Automotive, Pleos SDK)과 역할을 나눕니다(휴대폰: 여행지 기록·멍슐랭·여행 기록·커뮤니티).
+- `web/public/manifest.webmanifest`: 이름·아이콘(일반·maskable·apple-touch)·시작 화면(`#/home`)·바로가기(여행 기록·커뮤니티)
+- `web/src/pwa/sw-template.js` → 빌드 때 `dist/sw.js` 생성(vite 플러그인): 앱 파일 미리 저장, 화면 이동은 네트워크 우선·오프라인이면 저장본. 외부 API는 캐시하지 않음
+- `web/src/pwa/install.ts`, `InstallCard.tsx`: 안드로이드·PC Chrome은 설치 창, 아이폰은 Safari '공유 → 홈 화면에 추가' 안내. 미리보기 iframe·HTTP 에서는 서비스 워커를 등록하지 않음
+- 설치하려면 **HTTPS 로 배포된 주소**가 필요합니다(claude.ai 미리보기 안에서는 설치 불가). 저장소의 `vercel.json`·`netlify.toml` 또는 GitHub Pages 로 배포할 수 있어요.

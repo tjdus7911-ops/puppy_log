@@ -8,6 +8,9 @@ import { formatDuration, formatKm, ageFrom } from '../domain/format';
 import { CATEGORY_LABEL, mapJsKey, PET_SIZE_LABEL, type PlaceCategory } from '../domain/models';
 import { storageMode } from '../data/db';
 import { regionLabel } from '../domain/regions';
+import { InstallCard } from '../pwa/InstallCard';
+import { useInstallState } from '../pwa/install';
+import { useWide } from '../app/useWide';
 import { carAppMetrics, METRIC_TARGET, ratioText } from '../domain/metrics';
 import { speechRecognitionSupported } from '../trip/voice';
 import { TripController } from '../trip/TripController';
@@ -22,6 +25,8 @@ type Wipe = 'demo' | 'trips' | 'all' | null;
 export default function MyPage() {
   const { pets, trips, settings, updateSettings, reload, toast } = useStore();
   const [locBusy, setLocBusy] = useState(false);
+  const installSt = useInstallState();
+  const wideScreen = useWide();
   const realTrips = trips.filter((t) => !t.isDemo);
   const metricsSrc = realTrips.length ? '실제 여행' : '데모 여행';
   const metrics = carAppMetrics(realTrips.length ? realTrips : trips);
@@ -200,6 +205,13 @@ export default function MyPage() {
           </div>
         </div>
       </section>
+
+      {!wideScreen && (
+        <section className="section">
+          <h2 className="h-md" style={{ marginBottom: 12 }}>앱 설치</h2>
+          {installSt === 'installed' ? <div className="card"><p style={{ fontWeight: 650 }}>앱으로 설치되어 있어요</p><p className="t-cap mt-8">홈 화면의 멍로드 아이콘으로 열고 있어요.</p></div> : installSt === 'unsupported' ? <div className="card"><p className="t-sub">이 브라우저는 설치를 지원하지 않아요. 안드로이드는 Chrome, 아이폰은 Safari로 열어 주세요.</p></div> : <InstallCard dismissible={false} />}
+        </section>
+      )}
 
       <section className="section">
         <h2 className="h-md" style={{ marginBottom: 12 }}>집 위치</h2>

@@ -24,6 +24,7 @@ import { PhotoFallback, PlaceRow, SectionHeader, StatStrip, TripPhotoCard } from
 import { PET_SIZE_LABEL as SIZE_LABEL } from '../domain/models';
 import { aggregatePaws } from './PawMap';
 import { PetPhoto } from './home/PetHero';
+import { InstallCard } from '../pwa/InstallCard';
 import CarHome from './home/CarHome';
 import { BackgroundSheet, TripBackground } from './home/TripBackground';
 import { SafetyCheck } from './SafetyCheck';
@@ -148,6 +149,8 @@ function IdleHome() {
           <Navigation size={18} /><span className="grow">강릉 경포해변 여행 체험하기</span><span className="badge sample">데모</span>
         </button>
       )}
+
+      <InstallCard compact />
 
       <nav className="mh-quick" aria-label="바로가기">
         {quick.map((q) => (
