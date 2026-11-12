@@ -30,5 +30,8 @@ jobs:
             echo "[$M] $(wc -l < out/$M-$VER-api.txt) lines"
           done
           ls -la out
+      - name: Print API (로그로 확인)
+        run: |
+          for f in out/*-api.txt out/*Manifest.xml out/*.pom; do echo "=====FILE $f"; cat "$f"; done
       - uses: actions/upload-artifact@v4
         with: { name: pleos-api, path: out }
