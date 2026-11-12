@@ -75,8 +75,6 @@ p = find("이름")
 sh("shell", "input", "tap", str(p[0]), str(p[1])); sh("shell", "input", "text", "Coco"); time.sleep(1)
 p = find("나이(살)")
 sh("shell", "input", "tap", str(p[0]), str(p[1])); sh("shell", "input", "text", "3"); time.sleep(1)
-sh("shell", "input", "keyevent", "111")  # 키보드 닫기
-time.sleep(1)
 shot("02-pet-edit")
 tap("저장", exact=True)
 shot("03-pets")
