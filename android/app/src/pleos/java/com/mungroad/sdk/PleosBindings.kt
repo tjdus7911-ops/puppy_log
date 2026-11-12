@@ -92,17 +92,17 @@ private class PleosNavigationProvider(context: Context) : NavigationProvider {
     }
 
     override suspend fun guideTo(name: String, point: GeoPoint, preferWaypoint: Boolean): NavRequestResult = runCatching {
-        val poiId = "mungroad-${(name + point.latitude + point.longitude).hashCode()}"
+        val poiId = "mungroad-${(name + point.lat + point.lng).hashCode()}"
         if (preferWaypoint) {
             navi.addWaypoint(RequestWaypointInfo(
-                latitude = point.latitude, longitude = point.longitude, poiName = name,
+                latitude = point.lat, longitude = point.lng, poiName = name,
                 waypointIndex = WaypointIndex.FIRST, poiId = poiId, address = name, poiSubId = "0",
             ))
         } else {
             lastDestinationName = name
             // 반려견이 탄 날 기본 경로 옵션: 편한 길(RouteOption.COMFORTABLE)
             navi.requestRoute(RouteInfo(
-                latitude = point.latitude, longitude = point.longitude, poiName = name, poiId = poiId,
+                latitude = point.lat, longitude = point.lng, poiName = name, poiId = poiId,
                 poiSubId = "0", address = name, routeOption = RouteOption.COMFORTABLE,
             ))
         }
@@ -148,7 +148,7 @@ private class PleosCabinSource(context: Context) : CabinSource {
         }
         runCatching { vehicle.getHVAC().registerHvacAcState(driverSeat, acListener) }
         val turnListener = object : TurnSignalStateListener {
-            override fun onTurnSignalStateUpdated(v: TurnSignalValue) { emit(s.copy(turnSignal = v != TurnSignalValue.OFF && v != TurnSignalValue.UNKNOWN)) }
+            override fun onTurnSignalStateUpdated(v: TurnSignalValue) { emit(s.copy(turnSignal = v == TurnSignalValue.LEFT || v == TurnSignalValue.RIGHT)) }
             override fun onFailed(e: Exception) {}
         }
         runCatching { vehicle.getTurnSignal().registerTurnSignalState(turnListener) }
