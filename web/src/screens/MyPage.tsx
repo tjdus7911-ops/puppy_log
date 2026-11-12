@@ -8,6 +8,7 @@ import { formatDuration, formatKm, ageFrom } from '../domain/format';
 import { CATEGORY_LABEL, mapJsKey, PET_SIZE_LABEL, type PlaceCategory } from '../domain/models';
 import { storageMode } from '../data/db';
 import { regionLabel } from '../domain/regions';
+import { carAppMetrics, METRIC_TARGET, ratioText } from '../domain/metrics';
 import { speechRecognitionSupported } from '../trip/voice';
 import { TripController } from '../trip/TripController';
 import { Hint, Sheet, Switch, TopBar } from '../ui/components';
@@ -21,6 +22,9 @@ type Wipe = 'demo' | 'trips' | 'all' | null;
 export default function MyPage() {
   const { pets, trips, settings, updateSettings, reload, toast } = useStore();
   const [locBusy, setLocBusy] = useState(false);
+  const realTrips = trips.filter((t) => !t.isDemo);
+  const metricsSrc = realTrips.length ? '실제 여행' : '데모 여행';
+  const metrics = carAppMetrics(realTrips.length ? realTrips : trips);
   const saveHome = () => {
     if (!('geolocation' in navigator)) { toast('이 기기에서는 위치를 확인할 수 없어요.', 'error'); return; }
     setLocBusy(true);
@@ -106,6 +110,19 @@ export default function MyPage() {
           <div className="stat"><span className="k">다녀온 지역</span><p className="v">{regions}곳</p></div>
         </div>
         <p className="t-cap mt-8">실제 기록만 집계해요. 데모 시뮬레이션 기록은 포함되지 않아요.</p>
+      </section>
+
+      <section className="section">
+        <h2 className="h-md" style={{ marginBottom: 12 }}>차량 앱 지표 <span className="t-cap">(이 기기 기록 · {metricsSrc})</span></h2>
+        <div className="card metrics" data-testid="car-metrics">
+          {([['휴식 알림 응답률', '휴식 알림 뒤 휴식 시작·휴식지 찾기로 이어진 비율', metrics.restResponse, METRIC_TARGET.restResponse], ['장소 제안 수락률', '주행 중 동반 장소 제안이 들르기(경유지)로 이어진 비율', metrics.placeAccept, METRIC_TARGET.placeAccept], ['여행 기록 완료율', '시작한 여행이 마무리·저장까지 이어진 비율', metrics.completion, METRIC_TARGET.completion]] as const).map(([k, d, r, tg]) => (
+            <div key={k} className="row" style={{ alignItems: 'flex-start', padding: '8px 0' }}>
+              <div className="grow"><p style={{ fontWeight: 650 }}>{k}</p><p className="t-cap">{d} · 출시 12개월 목표 {Math.round(tg * 100)}%</p></div>
+              <b className="num">{ratioText(r)}</b>
+            </div>
+          ))}
+          <p className="t-cap mt-8">출시 후에는 익명 통계로만 집계하고 위치·경로는 지표에 쓰지 않아요.</p>
+        </div>
       </section>
 
       <section className="section">
@@ -286,6 +303,9 @@ function integrations(api: string, jsKey: string): Integ[] {
     ['내비 목적지 전달', '웹: 카카오맵 링크 · 차량: NaviHelper 연동 예정', 'off'],
     ['차량 내비 목적지 → 기록 시작 제안', '데모 안내만 · 차량 연동 예정', 'demo'],
     ['내비 경로 옵션·분할 화면', '미지원 · 차량 확인 필요', 'off'],
+    ['차량 상태(창문·문·공조·외기 온도·방향지시등)', '데모 시뮬레이션 · 차량에서는 Vehicle SDK·AAOS 도메인별 지원 확인 후 적용', 'demo'],
+    ['에어컨 켜기(HVAC 제어)', '데모 · 보호자 동의 시에만 · 권한 승인·지원 차종', 'demo'],
+    ['주행 거리계(Odometer)', '미연동 · 위치 기록으로 거리 계산', 'off'],
     ['음성 명령', speechRecognitionSupported() ? '브라우저 인식 + 데모 명령' : '데모 명령', speechRecognitionSupported() ? 'ok' : 'demo'],
     ['커뮤니티', '예시 게시물(준비 중)', 'demo'],
     ['차량 앱 ↔ 모바일 앱 여행 동기화', '향후 개발 · 서버 미구현(이 기기에만 저장)', 'off'],

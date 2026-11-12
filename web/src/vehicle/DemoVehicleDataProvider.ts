@@ -1,6 +1,18 @@
 import type { VehicleSample } from '../domain/tripEngine';
 import type { ProviderStartResult, VehicleDataProvider } from './VehicleDataProvider';
 import { DEMO_ROUTES, type DemoRouteKey } from './demoRoute';
+import type { CabinCapabilities, CabinState } from '../domain/cabin';
+
+/** 데모 차량 상태 이벤트(상태별 화면 테스트·자동 시나리오) */
+export type DemoCabinEvent = 'window-open' | 'heat' | 'rest-area-door' | 'turn-signal' | 'warning';
+
+/** 데모 시나리오: 가는 길 약 15분 지점에 뒷좌석 창문 60% 열림 → 잠시 뒤 닫힘, 방향지시등 몇 번, 오는 길은 31℃·에어컨 꺼짐 */
+export const DEMO_CABIN_SCRIPT = {
+  windowOpenKm: 15, windowCloseKm: 24, windowPct: 60,
+  turnSignalKm: [32, 78, 133], turnSignalSec: 6,
+  returnHeat: { startC: 27, peakC: 31, peakKm: 20 },
+  outboundTempC: 24,
+};
 
 export interface DemoSnapshot {
   simTime: number;
@@ -12,6 +24,15 @@ export interface DemoSnapshot {
   speed: number;
   /** v2: outbound = 서울→강릉, return = 강릉→서울(역방향), local = 여행지 내 추가 이동 */
   direction?: DemoRouteKey;
+  /** v3: 차량 탑승 공간 상태(데모) */
+  cabin?: CabinState;
+  /** 휴게소 주차 데모: 남은 주차 시간(초) / 뒷문 열림까지·닫힘까지 남은 시간 */
+  parkLeftSec?: number;
+  doorOpenInSec?: number;
+  doorCloseInSec?: number;
+  turnLeftSec?: number;
+  warnLeftSec?: number;
+  scriptDone?: string[];
 }
 
 const TICK_MS = 250;
@@ -26,6 +47,8 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
   readonly source = 'demo' as const;
   readonly isSimulated = true;
   readonly capabilities = { location: true, speed: true, motionState: true, parkingState: true };
+  /** 데모는 모든 탑승 공간 도메인을 시뮬레이션(주행 거리는 데모에서 위치 기록으로 계산 → odometer 미사용) */
+  readonly cabinCapabilities: CabinCapabilities = { window: true, door: true, hvac: true, hvacControl: true, outsideTemp: true, turnSignal: true, safety: true, odometer: false, ignition: true, brake: true };
 
   private st: DemoSnapshot;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -33,6 +56,7 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
   private sinceSample = 0;
   private currentSpeed = 0;
   public onArrive: (() => void) | null = null;
+  private doorCloseReal: number | null = null;
   private arrived = false;
 
   constructor(startTime: number, speedMultiplier: number, restore?: DemoSnapshot, direction: DemoRouteKey = 'outbound') {
@@ -48,6 +72,38 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
     };
     this.st.speed = speedMultiplier;
     this.st.direction = this.st.direction ?? 'outbound';
+    const ret = this.st.direction === 'return';
+    this.st.cabin = this.st.cabin ?? {
+      rearWindowOpenPct: 0, rearDoorOpen: false, acOn: !ret, outsideTempC: ret ? DEMO_CABIN_SCRIPT.returnHeat.startC : DEMO_CABIN_SCRIPT.outboundTempC,
+      turnSignal: false, vehicleWarning: false, ignitionOn: true, parkingBrake: false, odometerKm: null,
+    };
+    this.st.scriptDone = this.st.scriptDone ?? [];
+  }
+
+  get cabin(): CabinState { return { ...this.st.cabin! }; }
+
+  async setAc(on: boolean): Promise<boolean> {
+    this.st.cabin = { ...this.st.cabin!, acOn: on };
+    this.emit();
+    return true;
+  }
+
+  /** 데모 차량 이벤트 */
+  simulateCabin(ev: DemoCabinEvent) {
+    const c = this.st.cabin!;
+    // 상태 테스트 이벤트는 배속과 관계없이 실제 시간 기준으로 보이도록 시뮬레이션 초로 환산
+    const real = (sec: number) => sec * this.st.speed;
+    if (ev === 'window-open') this.st.cabin = { ...c, rearWindowOpenPct: DEMO_CABIN_SCRIPT.windowPct };
+    if (ev === 'heat') this.st.cabin = { ...c, outsideTempC: DEMO_CABIN_SCRIPT.returnHeat.peakC, acOn: false };
+    if (ev === 'turn-signal') { this.st.cabin = { ...c, turnSignal: true }; this.st.turnLeftSec = real(DEMO_CABIN_SCRIPT.turnSignalSec); }
+    if (ev === 'warning') { this.st.cabin = { ...c, vehicleWarning: true }; this.st.warnLeftSec = real(8); }
+    if (ev === 'rest-area-door') {
+      // 휴게소에 주차 → 2초 뒤 뒷문 열림 → 20초 뒤 닫힘. 휴식을 시작하지 않으면 60초 뒤 다시 출발
+      this.st.parkLeftSec = real(60); this.st.doorOpenInSec = real(2); this.st.doorCloseInSec = undefined; this.doorCloseReal = real(20);
+      this.st.cabin = { ...c, parkingBrake: true };
+      this.currentSpeed = 0;
+    }
+    this.emit();
   }
 
   get direction(): DemoRouteKey {
@@ -89,6 +145,8 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
 
   onRestChanged(resting: boolean) {
     this.st.resting = resting;
+    if (!resting) { this.st.parkLeftSec = undefined; this.st.doorOpenInSec = undefined; this.st.doorCloseInSec = undefined; this.st.cabin = { ...this.st.cabin!, parkingBrake: false, rearDoorOpen: false }; }
+    else this.st.cabin = { ...this.st.cabin!, parkingBrake: true };
     this.emit();
   }
 
@@ -124,6 +182,13 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
 
   private advance(h: number) {
     this.st.simTime += h * 1000;
+    this.cabinTick(h);
+    if (this.st.parkLeftSec != null && !this.st.resting) {
+      this.st.parkLeftSec -= h;
+      this.currentSpeed = 0;
+      if (this.st.parkLeftSec <= 0) { this.st.parkLeftSec = undefined; this.st.cabin = { ...this.st.cabin!, parkingBrake: false, rearDoorOpen: false }; }
+      return;
+    }
     if (this.st.resting || this.arrived) {
       this.currentSpeed = 0;
       return;
@@ -153,6 +218,30 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
     }
   }
 
+  /** 데모 차량 상태 시나리오와 타이머 */
+  private cabinTick(h: number) {
+    const c = { ...this.st.cabin! };
+    const done = this.st.scriptDone!;
+    const once = (id: string, cond: boolean, f: () => void) => { if (cond && !done.includes(id)) { done.push(id); f(); } };
+    const S = DEMO_CABIN_SCRIPT;
+    if (this.direction === 'outbound') {
+      once('win-open', this.st.km >= S.windowOpenKm, () => { c.rearWindowOpenPct = S.windowPct; });
+      once('win-close', this.st.km >= S.windowCloseKm, () => { c.rearWindowOpenPct = 10; });
+      S.turnSignalKm.forEach((k, i) => once(`turn-${i}`, this.st.km >= k, () => { c.turnSignal = true; this.st.turnLeftSec = S.turnSignalSec; }));
+    }
+    if (this.direction === 'return' && !c.acOn) {
+      const r = S.returnHeat;
+      c.outsideTempC = Math.max(c.outsideTempC ?? r.startC, Math.min(r.peakC, r.startC + (r.peakC - r.startC) * (this.st.km / r.peakKm)));
+    }
+    if (this.st.turnLeftSec != null) { this.st.turnLeftSec -= h; if (this.st.turnLeftSec <= 0) { this.st.turnLeftSec = undefined; c.turnSignal = false; } }
+    if (this.st.warnLeftSec != null) { this.st.warnLeftSec -= h; if (this.st.warnLeftSec <= 0) { this.st.warnLeftSec = undefined; c.vehicleWarning = false; } }
+    if (this.st.doorOpenInSec != null) { this.st.doorOpenInSec -= h; if (this.st.doorOpenInSec <= 0) { this.st.doorOpenInSec = undefined; c.rearDoorOpen = true; this.st.doorCloseInSec = this.doorCloseReal ?? 20; } }
+    if (this.st.doorCloseInSec != null) { this.st.doorCloseInSec -= h; if (this.st.doorCloseInSec <= 0) { this.st.doorCloseInSec = undefined; c.rearDoorOpen = false; } }
+    const changed = JSON.stringify(c) !== JSON.stringify(this.st.cabin);
+    this.st.cabin = c;
+    if (changed) this.emit();
+  }
+
   private emit() {
     if (!this.onSample) return;
     const p = this.route.pointAt(this.st.km);
@@ -173,7 +262,8 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
       longitude: lon,
       accuracy,
       speedKmh: this.currentSpeed,
-      motion: this.st.resting || this.arrived ? 'parked' : moving ? 'moving' : 'stopped',
+      motion: this.st.resting || this.arrived || this.st.parkLeftSec != null ? 'parked' : moving ? 'moving' : 'stopped',
+      cabin: { ...this.st.cabin! },
     });
   }
 }

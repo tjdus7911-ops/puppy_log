@@ -11,7 +11,7 @@ import { arrivalPush, queueEvent } from './events';
 import { hasCare, resolveRestPolicy, restDueVoice, restSoonVoice, type IntervalChangeReason, type RestPolicy, type RestRecoEntry, type RestRecoResponse } from '../domain/restCare';
 import { activityTime } from './activityTime';
 import { repo, type ActiveTripSnapshot } from '../data/db';
-import type { DriveLeg, GeoPoint, LegKind, Pet, PlaceCategory, RestSession, Trip, TripLocation, TripPhase } from '../domain/models';
+import type { DriveLeg, GeoPoint, LegKind, Pet, PlaceCategory, RestSession, RestStartMethod, Trip, TripLocation, TripPhase } from '../domain/models';
 import { newId } from '../domain/models';
 import { nearestRegion, regionLabel, regionShort } from '../domain/regions';
 import {
@@ -19,11 +19,14 @@ import {
   type EngineEvent, type EngineState, type Motion,
 } from '../domain/tripEngine';
 import { autoTitle, callName } from '../domain/tripText';
-import { DemoVehicleDataProvider, type DemoSnapshot } from '../vehicle/DemoVehicleDataProvider';
+import { DemoVehicleDataProvider, type DemoCabinEvent, type DemoSnapshot } from '../vehicle/DemoVehicleDataProvider';
 import { DeviceLocationDataProvider, ManualDataProvider } from '../vehicle/otherProviders';
 import type { VehicleDataProvider } from '../vehicle/VehicleDataProvider';
 import { speak } from './speech';
 import { haversineKm } from '../domain/geo';
+import { EMPTY_MEMO, evaluateCabin, isHot, NO_CABIN, restHeatCare, shouldHoldAlerts, type CabinCapabilities, type CabinMemo, type CabinPrompt, type CabinState } from '../domain/cabin';
+import { breedLooksBrachy } from '../domain/restCare';
+import { setSpeechHold } from './speech';
 
 export type StartKind = 'demo' | 'device-location' | 'manual';
 
@@ -72,12 +75,22 @@ export interface LiveSnapshot {
   restoredFromSnapshot: boolean;
   lastError: string | null;
   recordRoute: boolean;
+  /** 차량 탑승 공간 상태와 지원 여부 */
+  cabin: CabinState | null;
+  cabinCaps: CabinCapabilities;
+  /** 지금 보여 줄 탑승 안전 안내(한 번에 하나) */
+  cabinPrompt: CabinPrompt | null;
+  /** 휴식 중 더운 날 물·그늘 안내 문구 */
+  heatCare: string | null;
+  /** 방향지시등·차량 경고로 알림을 미루는 중 */
+  alertsHeld: boolean;
 }
 
 const EMPTY: LiveSnapshot = {
   active: false, phase: null, driving: false, legKind: null, trip: null, petNames: [], kind: null, engine: null, secondsUntilRest: 0,
   gpsLost: false, position: null, route: [], reminder: null, arrived: false, demoSpeed: 1, manualMotion: null,
   restoredFromSnapshot: false, lastError: null, recordRoute: true,
+  cabin: null, cabinCaps: NO_CABIN, cabinPrompt: null, heatCare: null, alertsHeld: false,
 };
 
 interface PersistMeta {
@@ -90,6 +103,8 @@ interface PersistMeta {
   base?: { distanceKm: number; drivingSec: number };
   /** 오는 길 도착 판정용 집 위치(이 기기 로컬 상태에만 보관, 여행 기록에는 넣지 않음) */
   home?: GeoPoint | null;
+  /** 함께 탄 반려견 중 단두종이 있음(더위 안내 기준 온도) */
+  brachy?: boolean;
 }
 
 /** 실제 위치 기반 구간에서 목적지(또는 집) 근처 도착으로 보는 거리 */
@@ -147,7 +162,7 @@ export class TripControllerImpl {
         restPolicy: o.restPolicy ?? resolveRestPolicy(o.pets, startTime), restRecoLog: [], restIntervalChanges: [],
       };
       this.trip = trip;
-      this.meta = { petNames: o.pets.map((p) => p.name), recordRoute: o.recordRoute, voice: o.voice, care: o.pets.some(hasCare), base: { distanceKm: 0, drivingSec: 0 } };
+      this.meta = { petNames: o.pets.map((p) => p.name), recordRoute: o.recordRoute, voice: o.voice, care: o.pets.some(hasCare), base: { distanceKm: 0, drivingSec: 0 }, brachy: o.pets.some((p) => p.care?.brachycephalic ?? breedLooksBrachy(p.breed)) };
       this.attachLeg(this.newLeg('outbound', startTime, provider), provider, createEngine(startTime, o.restIntervalMinutes));
       const res = await provider.start(this.onSample);
       if (!res.ok) {
@@ -442,6 +457,12 @@ export class TripControllerImpl {
     this.pendingLocs = [];
     this.reminder = null;
     this.arrived = false;
+    this.cabin = null;
+    this.cabinCaps = provider.cabinCapabilities ?? NO_CABIN;
+    this.cabinMemo = EMPTY_MEMO;
+    this.cabinPrompt = null;
+    setSpeechHold(false);
+    if (this.trip && !this.trip.vehicleCaps) this.trip = { ...this.trip, vehicleCaps: this.cabinCaps };
     if (provider instanceof DemoVehicleDataProvider) {
       provider.onArrive = () => {
         this.arrived = true;
@@ -524,8 +545,64 @@ export class TripControllerImpl {
     const { state, events } = step(this.engine, sample);
     this.engine = state;
     for (const ev of events) this.handle(ev);
+    if (sample.cabin) this.onCabin(sample.cabin, sample.motion);
     this.emit(false);
   };
+
+  // ─────────────────────── 반려견 탑승 안전 안내(차량 상태) ───────────────────────
+  private cabin: CabinState | null = null;
+  private cabinCaps: CabinCapabilities = NO_CABIN;
+  private cabinMemo: CabinMemo = EMPTY_MEMO;
+  private cabinPrompt: CabinPrompt | null = null;
+  private cabinTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private onCabin(c: CabinState, motion: Motion) {
+    if (!this.trip || !this.engine) return;
+    const prevHold = this.cabin ? shouldHoldAlerts(this.cabin, this.cabinCaps) : false;
+    this.cabin = c;
+    const hold = shouldHoldAlerts(c, this.cabinCaps);
+    if (hold !== prevHold) { setSpeechHold(hold); this.emit(true); }
+    const petCall = callName(this.meta.petNames[0] ?? '우리 강아지');
+    const { prompt, memo } = evaluateCabin(c, this.cabinMemo, {
+      moving: motion === 'moving', parked: motion === 'parked' || (this.cabinCaps.brake && c.parkingBrake === true),
+      resting: this.engine.status === 'resting', arrived: this.arrived, petCall, brachy: !!this.meta.brachy, caps: this.cabinCaps, now: this.engine.lastTick,
+    });
+    this.cabinMemo = memo;
+    if (!prompt) return;
+    this.cabinPrompt = prompt;
+    this.trip = { ...this.trip, safetyLog: [...(this.trip.safetyLog ?? []), { at: prompt.at, kind: prompt.kind, response: 'none' as const }].slice(-100) };
+    if (this.meta.voice) speak(prompt.text, prompt.priority);
+    // 응답이 없으면 잠시 후 자동으로 사라짐(실제 시간 기준)
+    if (this.cabinTimer) clearTimeout(this.cabinTimer);
+    // 데모 고배속에서는 시뮬레이션 시간에 비례해 더 빨리 닫음(60배속까지는 실제 15초/30초, 최소 3초)
+    const mult = this.provider instanceof DemoVehicleDataProvider ? Math.max(1, this.provider.speedMultiplier / 60) : 1;
+    this.cabinTimer = setTimeout(() => { if (this.cabinPrompt?.at === prompt.at) { this.cabinPrompt = null; this.emit(true); } }, Math.max(3_000, (prompt.ask ? 30_000 : 15_000) / mult));
+    queueMicrotask(() => this.emit(true));
+    void this.persist();
+  }
+
+  /** 탑승 안전 안내에 대한 보호자 응답. 에어컨은 '예'일 때만 켬, 뒷문 확인 '예'면 휴식 시작 */
+  async answerCabinPrompt(yes: boolean): Promise<void> {
+    const pr = this.cabinPrompt;
+    if (!pr || !this.trip) return;
+    this.cabinPrompt = null;
+    const log = [...(this.trip.safetyLog ?? [])];
+    const i = log.map((x) => x.at).lastIndexOf(pr.at);
+    if (i >= 0) log[i] = { ...log[i], response: yes ? 'yes' : 'no' };
+    this.trip = { ...this.trip, safetyLog: log };
+    if (yes && pr.kind === 'heat' && this.cabinCaps.hvacControl && this.provider?.setAc) {
+      const ok = await this.provider.setAc(true);
+      if (this.meta.voice) speak(ok ? '에어컨을 켰어요.' : '에어컨을 켜지 못했어요. 직접 켜 주세요.', 'info');
+    } else if (yes && pr.kind === 'door-rest') {
+      if (this.reminder?.kind === 'due') this.logRestResponse('rest');
+      await this.beginRest('door');
+      return;
+    } else if (!yes && pr.kind === 'heat' && this.meta.voice) {
+      speak('알겠어요.', 'info');
+    }
+    this.emit(true);
+    void this.persist();
+  }
 
   private handle(ev: EngineEvent) {
     if (!this.trip || !this.leg) return;
@@ -575,15 +652,16 @@ export class TripControllerImpl {
     this.emit(true);
   }
 
-  async beginRest(): Promise<boolean> {
+  async beginRest(method: RestStartMethod = 'button'): Promise<boolean> {
     if (!this.engine || !this.trip || !this.provider || !this.leg) return false;
     const at = this.provider.now();
     const { state, started } = startRest(this.engine, at); // 이미 휴식 중이면 started=false (중복 방지)
     if (!started) return false;
     this.engine = state;
     const fix = state.lastFix;
-    this.openRest = { id: newId(), tripId: this.trip.id, legId: this.leg.id, startTime: at, endTime: null, latitude: fix?.latitude ?? null, longitude: fix?.longitude ?? null };
+    this.openRest = { id: newId(), tripId: this.trip.id, legId: this.leg.id, startTime: at, endTime: null, latitude: fix?.latitude ?? null, longitude: fix?.longitude ?? null, startMethod: method };
     this.reminder = null;
+    if (this.cabinPrompt?.kind === 'door-rest') this.cabinPrompt = null;
     this.provider.onRestChanged?.(true);
     try {
       await repo.saveRest(this.openRest);
@@ -637,6 +715,29 @@ export class TripControllerImpl {
     this.emit(true);
     void this.persist();
     return true;
+  }
+
+  /** 데모 차량 이벤트(창문·더위·휴게소 주차 뒷문·방향지시등·차량 경고) */
+  demoCabin(ev: DemoCabinEvent): boolean {
+    if (!(this.provider instanceof DemoVehicleDataProvider)) return false;
+    if (ev === 'window-open' || ev === 'heat') {
+      // 같은 구간에서 다시 시연할 수 있도록 안내 기억을 초기화
+      this.cabinMemo = { ...this.cabinMemo, ...(ev === 'window-open' ? { windowNotified: false } : { heatAsked: false }) };
+    }
+    if (ev === 'rest-area-door' && this.engine?.status === 'resting') return false;
+    this.provider.simulateCabin(ev);
+    return true;
+  }
+
+  /** 주행 중 동반 장소 제안 기록(장소 제안 수락률) */
+  logPlaceSuggestion(placeId: string, accepted: boolean | null) {
+    if (!this.trip) return;
+    const log = [...(this.trip.placeSuggestLog ?? [])];
+    const last = log[log.length - 1];
+    if (last && last.placeId === placeId && last.accepted === null) log[log.length - 1] = { ...last, accepted };
+    else log.push({ at: this.engine?.lastTick ?? Date.now(), placeId, accepted });
+    this.trip = { ...this.trip, placeSuggestLog: log.slice(-100) };
+    void this.persist();
   }
 
   /** 휴식 추천 이력 기록(추천 시점·간격·근거) */
@@ -772,6 +873,11 @@ export class TripControllerImpl {
         restoredFromSnapshot: this.restored,
         lastError: this.lastError,
         recordRoute: this.meta.recordRoute,
+        cabin: this.cabin,
+        cabinCaps: this.cabinCaps,
+        cabinPrompt: this.cabinPrompt,
+        heatCare: e?.status === 'resting' && this.cabin && this.cabinCaps.outsideTemp && isHot(this.cabin, !!this.meta.brachy) ? restHeatCare(callName(this.meta.petNames[0] ?? '우리 강아지')) : null,
+        alertsHeld: this.cabin ? shouldHoldAlerts(this.cabin, this.cabinCaps) : false,
       };
     }
     for (const l of this.listeners) l();

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   BellRing, Camera, Car, Check, ChevronRight, CircleParking, Clock3, Coffee, Flag, FlaskConical, Fuel, Lock, MapPin, Mic, Navigation, PawPrint, Plus, Stethoscope,
-  Satellite, Timer, TriangleAlert,
+  Satellite, Timer, TriangleAlert, Wind, Thermometer, DoorOpen, Snowflake, Hand,
 } from 'lucide-react';
 import { TripController } from '../trip/TripController';
 import { useStore } from '../app/store';
@@ -262,7 +262,7 @@ export default function TripLive() {
     else if (intent === 'rest-start') {
       if (resting) answer = '이미 휴식 중이에요.';
       else if (driving && !isDemo) answer = '차를 세운 뒤에 휴식을 시작할 수 있어요.';
-      else { if (dash === 'due') TripController.logRestResponse('rest'); void TripController.beginRest(); answer = ''; }
+      else { if (dash === 'due') TripController.logRestResponse('rest'); void TripController.beginRest('voice'); answer = ''; }
     }
     else answer = '잘 알아듣지 못했어요. "주변 휴식 장소 찾아줘", "휴식 시작", "나중에 알려줘"처럼 말해 주세요.';
     if (answer) speak(answer, 'rest');
@@ -459,14 +459,40 @@ export default function TripLive() {
   const findRestPlace = () => { TripController.logRestResponse('find'); setRestSheet(['restArea', 'park']); };
   const remindLater = () => { TripController.logRestResponse('later'); TripController.snoozeReminder(15); toast('15분 뒤에 다시 알려드릴게요.'); };
 
+  // ── 반려견 탑승 안전 안내(차량 상태): 한 번에 하나, 휴식 카드 자리에 대신 표시 ──
+  const cp = live.cabinPrompt;
+  const safetyLine = cp ? (
+    <div className={`rest-line safety ${cp.kind}`} role="alert" data-testid="cabin-prompt">
+      <span className="ic">{cp.kind === 'window' ? <Wind size={18} /> : cp.kind === 'heat' ? <Thermometer size={18} /> : <DoorOpen size={18} />}</span>
+      <div className="grow" style={{ minWidth: 0 }}>
+        <p className="t">{cp.kind === 'door-rest' ? `${mainPetName ? `${callName(mainPetName)}와 ` : ''}휴식 시작할까요?` : cp.text}</p>
+        <p className="s">{cp.kind === 'window' ? '주행 중 뒷좌석 창문 상태 · 창문은 앱이 움직이지 않아요' : cp.kind === 'heat' ? `바깥 기온·공조 상태 기준${live.cabinCaps.hvacControl ? ' · ‘켜기’를 누를 때만 에어컨을 켜요' : ''}` : '휴게소 주차 중 뒷문이 열렸어요'}{isDemo ? ' · 데모 차량 상태' : ''}</p>
+      </div>
+      {cp.kind === 'heat' && cp.ask && <><button className="btn sm primary" onClick={() => void TripController.answerCabinPrompt(true)}><Snowflake size={15} />에어컨 켜기</button><button className="btn sm ghost" onClick={() => void TripController.answerCabinPrompt(false)}>괜찮아요</button></>}
+      {cp.kind === 'door-rest' && <><button className="btn sm primary" onClick={() => void TripController.answerCabinPrompt(true)}>휴식 시작</button><button className="btn sm ghost" onClick={() => void TripController.answerCabinPrompt(false)}>아니요</button></>}
+      {(cp.kind === 'window' || (cp.kind === 'heat' && !cp.ask)) && <button className="btn sm ghost" onClick={() => void TripController.answerCabinPrompt(false)}>확인</button>}
+    </div>
+  ) : null;
+  const cab = live.cabin; const caps = live.cabinCaps;
+  const cabinRow = cab && (caps.outsideTemp || caps.hvac || caps.window) ? (
+    <div className="cabin-row" aria-label="차 안 상태">
+      {caps.outsideTemp && cab.outsideTempC != null && <span><Thermometer size={14} />바깥 {Math.round(cab.outsideTempC)}°</span>}
+      {caps.hvac && cab.acOn != null && <span className={cab.acOn ? '' : 'off'}><Snowflake size={14} />에어컨 {cab.acOn ? '켜짐' : '꺼짐'}</span>}
+      {caps.window && cab.rearWindowOpenPct != null && <span className={cab.rearWindowOpenPct > 50 ? 'warn' : ''}><Wind size={14} />뒷창 {cab.rearWindowOpenPct > 0 ? `${Math.round(cab.rearWindowOpenPct)}%` : '닫힘'}</span>}
+      {caps.door && cab.rearDoorOpen && <span className="warn"><DoorOpen size={14} />뒷문 열림</span>}
+      {live.alertsHeld && <span className="hold"><Hand size={14} />{cab.turnSignal ? '방향지시등 작동 중' : '차량 경고 중'} · 알림 대기</span>}
+      {isDemo && <em>데모</em>}
+    </div>
+  ) : null;
+
   // ── 얇은 휴식 상태 카드(지도 하단). 빨간색은 쓰지 않음 ──
-  const restCard = dash === 'arrived' ? null : (
+  const restCard = dash === 'arrived' ? null : safetyLine ?? (
     <div className={`rest-line ${dash}`} role="status" aria-live="polite">
       <span className="ic">{dash === 'resting' ? <Timer size={18} /> : <PawPrint size={18} />}</span>
       <div className="grow" style={{ minWidth: 0 }}>
         <p className="t num">{dash === 'resting' ? `휴식 중 · ${Math.max(0, Math.floor(restElapsed / 60))}분` : dash === 'due' ? restDueTitle(mainPetName) : `다음 휴식까지 ${restMin}분`}
           {(dash === 'driving' || dash === 'soon') && restAheadKm != null && <small> 약 {formatKm(restAheadKm)} 앞</small>}</p>
-        <p className="s">{dash === 'resting' ? '충분히 쉬고 출발해요 · 물과 산책을 챙겨 주세요' : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 알림 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
+        <p className="s">{dash === 'resting' ? (live.heatCare ?? '충분히 쉬고 출발해요 · 물과 산책을 챙겨 주세요') : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 알림 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
       </div>
       {dash === 'due' && <span className="rl-acts"><button className="btn sm primary" onClick={findRestPlace}>가까운 휴식 장소</button><button className="btn sm ghost" onClick={remindLater}>나중에</button></span>}
       {(dash === 'driving' || dash === 'soon') && <span className="thin" aria-hidden="true"><i style={{ width: `${Math.min(100, (e.drivingSinceRestSec / Math.max(1, e.restIntervalMin * 60)) * 100)}%` }} /></span>}
@@ -550,6 +576,7 @@ export default function TripLive() {
             <ul className="cd-stats">
               {stats.map(([k, v, u]) => <li key={k}><span>{k}</span><b className="num">{v}{u && <small>{u}</small>}</b></li>)}
             </ul>
+            {cabinRow}
             <button className={`cd-voice ${voice.listening ? 'listening' : ''}`} onClick={onVoice}><Mic size={20} />음성 명령<span>“가까운 휴게소 찾아줘”</span></button>
             {voice.text && <p className="voice-line">{voice.text}</p>}
             {notices}
@@ -593,18 +620,19 @@ export default function TripLive() {
                   </button>
                 )}
                 {dash !== 'soon' && hzPill}
-                <div className={`rest-line ${dash}`} role="status" aria-live="polite">
+                {safetyLine}
+                {!safetyLine && <div className={`rest-line ${dash}`} role="status" aria-live="polite">
                   <span className="ic">{dash === 'resting' ? <Timer size={18} /> : <PawPrint size={18} />}</span>
                   <div className="grow" style={{ minWidth: 0 }}>
                     <p className="t num">{dash === 'resting' ? `휴식 중 · ${Math.max(0, Math.floor(restElapsed / 60))}분` : dash === 'due' ? restDueTitle(mainPetName) : `다음 휴식까지 ${restMin}분`}
                       {(dash === 'driving' || dash === 'soon') && restAheadKm != null && <small> (약 {formatKm(restAheadKm)})</small>}</p>
-                    <p className="s">{dash === 'resting' ? '충분히 쉬고 출발해요' : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
+                    <p className="s">{dash === 'resting' ? (live.heatCare ?? '충분히 쉬고 출발해요') : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
                   </div>
                   {dash === 'due' && <><button className="btn sm primary" onClick={findRestPlace}>가까운 휴식 장소 찾기</button><button className="btn sm ghost" onClick={remindLater}>나중에 알림</button>{!driving && <button className="btn sm ghost" onClick={() => { TripController.logRestResponse('rest'); void TripController.beginRest(); }}>휴식 시작</button>}</>}
                   {dash === 'resting' && <><button className="btn sm ghost" onClick={async () => { const added = await addPhotosToTrip(live.trip!.id, (m: string) => toast(m, 'error')); if (added?.length) toast(`사진 ${added.length}장을 추가했어요.`); }}><Camera size={15} />사진</button><button className="btn sm ghost" onClick={() => setIntervalSheet(true)}><BellRing size={15} />알림 간격</button><button className="btn sm primary" onClick={async () => { const d = await TripController.finishRest(); toast(`휴식을 마쳤어요 · ${formatDuration(d)}`); }}>휴식 종료</button></>}
                   {(dash === 'driving' || dash === 'soon') && !driving && <button className="btn sm ghost" onClick={() => TripController.beginRest()}>휴식 시작</button>}
                   {(dash === 'driving' || dash === 'soon') && <span className="thin" aria-hidden="true"><i style={{ width: `${Math.min(100, (e.drivingSinceRestSec / Math.max(1, e.restIntervalMin * 60)) * 100)}%` }} /></span>}
-                </div>
+                </div>}
               </div>
               {recSection}
             </section>
@@ -656,6 +684,7 @@ export default function TripLive() {
           </div>
         )}
         <div className="tiles3">{tiles}</div>
+        {cabinRow}
         {notices}
         {recSection}
         <div className="m-actions">{actions}</div>
@@ -730,6 +759,15 @@ export default function TripLive() {
           <button className="st-opt" disabled={!isDemo || isReturn || ending} onClick={async () => { setStateSheet(false); if (!live.arrived) await TripController.demoJump('arrived'); await arrive(); }}>
             <b>여행지 활동 중</b><span>도착 처리 후 사진·장소·메모 기록 화면</span>
           </button>
+        </div>
+        <p className="h-sm mt-24" style={{ fontWeight: 700 }}>차량 상태 이벤트 <span className="t-cap">(Vehicle SDK·AAOS 시뮬레이션)</span></p>
+        <div className="st-grid mt-12">
+          {([['window-open', '뒷좌석 창문 열림', '주행 중 60% → 창문 안내'], ['heat', '더운 날·에어컨 꺼짐', '바깥 31℃ → 에어컨 켜기 제안'], ['rest-area-door', '휴게소 주차·뒷문 열림', '“휴식 시작할까요?” 확인'], ['turn-signal', '방향지시등 작동', '6초 동안 음성 알림 미루기']] as const).map(([k, t, d]) => (
+            <button key={k} className="st-opt" disabled={!isDemo || dash === 'arrived' || (k === 'rest-area-door' && resting)}
+              onClick={() => { const ok = TripController.demoCabin(k); setStateSheet(false); if (!ok) toast('데모 주행 중에만 사용할 수 있어요.', 'error'); }}>
+              <b>{t}</b><span>{d}</span>
+            </button>
+          ))}
         </div>
       </Sheet>
 

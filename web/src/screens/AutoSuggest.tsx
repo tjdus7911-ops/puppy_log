@@ -2,7 +2,7 @@
 // 긴 목록·상세 화면 없이 한 곳만, 같은 장소는 다시 추천하지 않고, 경유지 요청은 '들르기'를 눌렀을 때만.
 import { useEffect, useRef, useState } from 'react';
 import { Mic, Navigation, X } from 'lucide-react';
-import type { LiveSnapshot } from '../trip/TripController';
+import { TripController, type LiveSnapshot } from '../trip/TripController';
 import type { AppSettings, GeoPoint, PlaceCategory } from '../domain/models';
 import { aheadByHeading, aheadOnRoute, COOLDOWN_SEC, isMealTime, parseYesNo, pickSuggestion, suggestionSentence, TRIGGER_CATEGORIES, type RecoCandidate, type RecoTrigger } from '../domain/autoReco';
 import { haversineKm } from '../domain/geo';
@@ -66,6 +66,7 @@ export function AutoSuggest({ live, settings, planned, voiceRequest, toast }: Pr
       const full = { ...(pick as RecoCandidate & { place: Place }), trigger };
       suggested.current.add(pick.id); // 같은 장소 반복 추천 금지
       setSug(full);
+      TripController.logPlaceSuggestion(pick.id, null);
       if (settings.voiceGuidance) speak(`${full.place.isSample ? '샘플 데이터입니다. ' : ''}${suggestionSentence(pick)}`, 'place');
     } finally {
       busy.current = false;
@@ -74,7 +75,8 @@ export function AutoSuggest({ live, settings, planned, voiceRequest, toast }: Pr
 
   // 트리거: 휴식 알림 시점 / 식사 시간대 / 음성 요청
   useEffect(() => {
-    if (!settings.autoRecommend || !live.driving || !e || sug) return;
+    // 한 번에 하나: 탑승 안전 안내가 떠 있으면 장소 제안은 기다림
+    if (!settings.autoRecommend || !live.driving || !e || sug || live.cabinPrompt) return;
     const key = live.reminder ? `${live.reminder.kind}-${live.reminder.drivenMinutes}` : null;
     if (key && key !== handledReminder.current) {
       handledReminder.current = key;
@@ -84,7 +86,7 @@ export function AutoSuggest({ live, settings, planned, voiceRequest, toast }: Pr
     if (isMealTime(e.lastTick) && e.drivingSec - lastAt.current.meal > COOLDOWN_SEC && e.status === 'driving') {
       void run('meal', null);
     }
-  }, [live.reminder, e?.lastTick, live.driving, settings.autoRecommend, sug]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [live.reminder, e?.lastTick, live.driving, settings.autoRecommend, sug, live.cabinPrompt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (voiceRequest.n > handledVoice.current && live.driving) {
@@ -103,9 +105,10 @@ export function AutoSuggest({ live, settings, planned, voiceRequest, toast }: Pr
       const r = openNavigation(sug.place.name, sug.place.latitude, sug.place.longitude, false);
       toast(r.ok ? '길 안내를 열었어요. (차량에서는 내비 경유지로 추가 예정)' : r.message!, r.ok ? 'info' : 'error');
     }
+    TripController.logPlaceSuggestion(sug.place.id, true);
     setSug(null);
   };
-  const decline = () => { setSug(null); if (settings.voiceGuidance) speak('알겠어요.'); };
+  const decline = () => { TripController.logPlaceSuggestion(sug.place.id, false); setSug(null); if (settings.voiceGuidance) speak('알겠어요.'); };
 
   const voiceReply = async () => {
     setListening(true);

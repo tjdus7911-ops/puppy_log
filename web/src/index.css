@@ -1618,3 +1618,19 @@ button.place-row { cursor: pointer; }
 .guide-reco ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: var(--text-2); }
 .guide-reco details { margin-top: 6px; }
 .guide-reco details summary { cursor: pointer; }
+/* 반려견 탑승 안전 안내(차량 상태) — 빨간색 대신 차분한 파랑/주황 */
+.rest-line.safety { background: linear-gradient(110deg, #f2f7ff, #e4eeff); box-shadow: var(--shadow), inset 0 0 0 1.5px rgba(59,110,240,.35); }
+.rest-line.safety .ic { background: #d6e4ff; color: var(--primary); }
+.rest-line.safety .t { color: #1d3f8f; white-space: normal; }
+.rest-line.safety.heat { background: linear-gradient(110deg, #fffaf0, #fff1d9); box-shadow: var(--shadow), inset 0 0 0 1.5px rgba(240,160,60,.45); }
+.rest-line.safety.heat .ic { background: #ffe2b0; color: var(--accent-text); }
+.rest-line.safety.heat .t { color: #8a4b05; }
+.rest-line.safety .btn svg { margin-right: 4px; }
+.cabin-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cabin-row span { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 999px; background: #fff; box-shadow: inset 0 0 0 1px var(--line, #e6ebf3); font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.cabin-row span.off { color: var(--text-3); }
+.cabin-row span.warn { color: var(--accent-text); background: #fff6e8; box-shadow: inset 0 0 0 1px rgba(240,160,60,.4); }
+.cabin-row span.hold { color: var(--primary); background: var(--primary-soft); box-shadow: none; }
+.cabin-row em { font-style: normal; font-size: 11px; color: var(--text-3); }
+.cd.v5 .cabin-row { margin-top: 10px; }
+.drive-sheet .rest-line.safety { position: relative; left: auto; right: auto; bottom: auto; flex-wrap: wrap; }

@@ -2,6 +2,7 @@
 // Android 쪽 domain/TripEngine.kt 와 같은 규칙을 따릅니다.
 import { evaluateFix, type FixInput } from './geo';
 import type { TripStatus } from './models';
+import type { CabinState } from './cabin';
 
 export type Motion = 'moving' | 'stopped' | 'parked' | 'unknown';
 
@@ -13,6 +14,8 @@ export interface VehicleSample {
   accuracy: number | null;
   speedKmh: number | null;
   motion: Motion;
+  /** 차량 탑승 공간 상태(지원하는 Provider만). 엔진은 쓰지 않고 TripController 의 탑승 안전 안내가 씀 */
+  cabin?: CabinState;
 }
 
 export interface ReminderState {

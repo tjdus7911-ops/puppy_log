@@ -134,6 +134,25 @@ try {
     return '‘데모’ 배지와 함께 표시';
   });
 
+  await step('차량 상태(데모): 창문 안내 · 더운 날 에어컨 · 뒷문 열림 휴식 확인', async () => {
+    const ev = async (label) => { await page.locator('.demo-tag').first().click(); await page.locator('.st-opt', { hasText: label }).click(); };
+    await ev('뒷좌석 창문 열림');
+    await page.locator('[data-testid=cabin-prompt]', { hasText: '뒷좌석 창문이 많이 열려 있어요' }).waitFor({ timeout: 8000 });
+    await page.locator('[data-testid=cabin-prompt]').getByRole('button', { name: '확인' }).click();
+    await ev('더운 날');
+    await page.locator('[data-testid=cabin-prompt]', { hasText: '에어컨을 켤까요?' }).waitFor({ timeout: 8000 });
+    await shot('07b-cabin-heat');
+    await page.locator('[data-testid=cabin-prompt]').getByRole('button', { name: '에어컨 켜기' }).click();
+    await page.locator('.cabin-row', { hasText: '에어컨 켜짐' }).waitFor({ timeout: 5000 });
+    await ev('휴게소 주차');
+    await page.locator('[data-testid=cabin-prompt]', { hasText: '휴식 시작할까요?' }).waitFor({ timeout: 8000 });
+    await page.locator('[data-testid=cabin-prompt]').getByRole('button', { name: '휴식 시작' }).click();
+    await page.locator('.rest-line.resting').first().waitFor({ timeout: 5000 });
+    await btn('휴식 종료').click();
+    await page.waitForTimeout(500);
+    return '창문 안내 → 에어컨 켜짐 → 뒷문 휴식 시작·종료';
+  });
+
   await step('강릉 목적지 도착 → 여행지 활동(여행 계속)', async () => {
     await page.locator('.drive-head .t', { hasText: '근처에 도착했어요' }).waitFor({ timeout: 120000 });
     if (await page.locator('.rest-line').count() || await page.locator('.rr-card').count()) throw new Error('도착 후에도 휴식 알림/추천이 보임');

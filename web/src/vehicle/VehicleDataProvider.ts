@@ -3,6 +3,7 @@
 // 한 여행 세션에는 정확히 하나의 Provider만 연결되므로 실제 데이터와 시뮬레이션이 섞이지 않습니다.
 import type { DataSource } from '../domain/models';
 import type { VehicleSample } from '../domain/tripEngine';
+import type { CabinCapabilities } from '../domain/cabin';
 
 export interface ProviderCapabilities {
   location: boolean;
@@ -19,6 +20,10 @@ export interface VehicleDataProvider {
   readonly source: DataSource;
   readonly isSimulated: boolean;
   readonly capabilities: ProviderCapabilities;
+  /** Vehicle SDK·AAOS 탑승 공간 도메인 지원 여부(없으면 모두 미지원) */
+  readonly cabinCapabilities?: CabinCapabilities;
+  /** 에어컨 켜기(보호자 동의 후에만 호출). 지원하지 않으면 false */
+  setAc?(on: boolean): Promise<boolean>;
   /** 데모는 시뮬레이션 시각, 그 외는 실제 시각 */
   now(): number;
   start(onSample: (s: VehicleSample) => void): Promise<ProviderStartResult>;

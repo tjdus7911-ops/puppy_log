@@ -1,6 +1,7 @@
 // 요청서 13장 데이터 구조를 그대로 옮긴 도메인 모델입니다.
 // Android 앱의 Room Entity(android/.../data/local/entity)와 필드 이름을 맞춰 두었습니다.
 
+import type { CabinCapabilities, CabinPromptKind } from './cabin';
 import type { IntervalChange, PetCare, RestPolicy, RestRecoEntry } from './restCare';
 
 export type PetSize = 'small' | 'medium' | 'large';
@@ -107,6 +108,10 @@ export interface Trip {
   restPolicy?: RestPolicy;
   restRecoLog?: RestRecoEntry[];
   restIntervalChanges?: IntervalChange[];
+  /** 여행 시작 때 확인한 차량 탑승 공간 도메인 지원 여부 */
+  vehicleCaps?: CabinCapabilities;
+  safetyLog?: SafetyLogEntry[];
+  placeSuggestLog?: PlaceSuggestEntry[];
 }
 
 export interface TripPet {
@@ -132,7 +137,17 @@ export interface RestSession {
   latitude: number | null;
   longitude: number | null;
   legId?: string | null;
+  /** 휴식 시작 방법(기획서 5장 RestSession): 화면 버튼 · 음성 · 주차 중 뒷문 열림 확인 */
+  startMethod?: RestStartMethod;
 }
+
+export type RestStartMethod = 'button' | 'voice' | 'door';
+export const REST_START_LABEL: Record<RestStartMethod, string> = { button: '버튼', voice: '음성', door: '뒷문 열림 확인' };
+
+/** 탑승 안전 안내·뒷문 휴식 확인 기록 */
+export interface SafetyLogEntry { at: number; kind: CabinPromptKind; response: 'yes' | 'no' | 'none' }
+/** 주행 중 동반 장소 제안 기록(장소 제안 수락률) */
+export interface PlaceSuggestEntry { at: number; placeId: string; accepted: boolean | null }
 
 export type PlaceCategory = 'restaurant' | 'cafe' | 'park' | 'restArea' | 'lodging' | 'vet';
 

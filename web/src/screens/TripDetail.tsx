@@ -7,7 +7,7 @@ import { addPhotosToTrip } from '../app/photos';
 import { buildDiaryInput } from '../diary/buildInput';
 import { renderShareCard } from '../app/shareCard';
 import { repo } from '../data/db';
-import { CATEGORY_LABEL, LEG_LABEL, PHASE_LABEL, SOURCE_LABEL, type DriveLeg, type RestSession, type Trip, type TripLocation, type TripPhoto, type VisitedPlace } from '../domain/models';
+import { CATEGORY_LABEL, LEG_LABEL, PHASE_LABEL, SOURCE_LABEL, type DriveLeg, type RestSession, type Trip, type TripLocation, type TripPhoto, type VisitedPlace, REST_START_LABEL } from '../domain/models';
 import { formatDuration, formatKm, formatKoreanDate, formatShortDate, formatTime } from '../domain/format';
 import { regionLabel, regionShort } from '../domain/regions';
 import { petNames as joinPetNames } from '../domain/tripText';
@@ -329,7 +329,7 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
                 <div style={{ width: 36, height: 36, borderRadius: 12, background: 'var(--accent-soft)', color: '#B5730D', display: 'grid', placeItems: 'center' }}><Coffee size={18} /></div>
                 <div className="grow">
                   <p style={{ fontWeight: 650 }}>{i + 1}번째 휴식 · {r.endTime ? formatDuration((r.endTime - r.startTime) / 1000) : '진행 중'}</p>
-                  <p className="t-cap">{formatTime(r.startTime)} ~ {r.endTime ? formatTime(r.endTime) : ''} · {r.latitude != null && r.longitude != null ? regionLabel({ latitude: r.latitude, longitude: r.longitude }) : '위치 정보 없음'}</p>
+                  <p className="t-cap">{formatTime(r.startTime)} ~ {r.endTime ? formatTime(r.endTime) : ''} · {r.latitude != null && r.longitude != null ? regionLabel({ latitude: r.latitude, longitude: r.longitude }) : '위치 정보 없음'}{r.startMethod ? ` · ${REST_START_LABEL[r.startMethod]}로 시작` : ''}</p>
                 </div>
               </div>
             ))}
