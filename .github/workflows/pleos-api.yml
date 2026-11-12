@@ -15,7 +15,7 @@ jobs:
           set -u
           REPO=https://nexus-playground.pleos.ai/repository/maven-releases/ai/pleos/playground
           mkdir -p out
-          for M in Vehicle NaviHelper TextToSpeech SpeechToText FusedLocation Adas LLM Tts Stt Llm VehicleSdk; do
+          for M in navi-data vehicle-data; do
             META=$(curl -fsS "$REPO/$M/maven-metadata.xml" || true)
             if [ -z "$META" ]; then echo "[$M] metadata 없음"; continue; fi
             VER=$(echo "$META" | grep -oP '(?<=<release>)[^<]+' || echo "$META" | grep -oP '(?<=<version>)[^<]+' | tail -1)
