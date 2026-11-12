@@ -23,6 +23,7 @@ import { PlaceRow, Stat } from '../ui/kit';
 import { callName } from '../domain/tripText';
 import { SafetyCheck } from './SafetyCheck';
 import { RestIntervalPicker } from './PetForm';
+import { BASIS_LABEL, resolveRestPolicy } from '../domain/restCare';
 
 export const DEMO_SPEEDS = [1, 10, 30, 60, 120, 300];
 
@@ -54,7 +55,7 @@ export default function TripSetup() {
   const [destText, setDestText] = useState(initial.text);
   const [dest, setDest] = useState<GeoPoint | null>(initial.point);
   const [restStops, setRestStops] = useState<{ atMin: number; atKm: number; place: Place | null }[]>([]);
-  const [interval, setIntervalMin] = useState(pets[0]?.restIntervalMinutes ?? settings.defaultRestIntervalMinutes);
+  const [interval, setIntervalMin] = useState(() => (pets[0] ? resolveRestPolicy([pets[0]]).intervalMinutes : settings.defaultRestIntervalMinutes));
   const [recordRoute, setRecordRoute] = useState(true);
   const [busy, setBusy] = useState(false);
   const [permSheet, setPermSheet] = useState<string | null>(null);
@@ -89,11 +90,24 @@ export default function TripSetup() {
     return () => { cancel = true; };
   }, [dueKey, settings.apiBaseUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const restPolicy = resolveRestPolicy(pets.filter((p) => selected.includes(p.id)));
+  const basisNow = interval === restPolicy.intervalMinutes ? BASIS_LABEL[restPolicy.basis] : '보호자 조정';
+  const restBasisBox = (
+    <div className="rest-basis">
+      <p className="b"><b>{interval}분</b> 간격 · {basisNow}{restPolicy.basis === 'vet' && interval !== restPolicy.intervalMinutes && <span className="warn"> (수의사 안내 {restPolicy.intervalMinutes}분과 달라요)</span>}</p>
+      {restPolicy.reasons.length > 1 && <p className="t-cap">{restPolicy.reasons[1]}</p>}
+      {restPolicy.prompts.length > 0 && (
+        <ul className="care-prompts">{restPolicy.prompts.map((pr) => <li key={pr.petId + pr.ruleId}>{pr.text}</li>)}</ul>
+      )}
+      <p className="t-cap">실제 피로도나 건강 상태를 측정한 값이 아니에요. 주행 시간 기준으로만 알려 드려요 · {settings.demoMode ? '데모 시뮬레이션 주행 시간' : '차량 연동 전이라 휴대폰 위치로 주행 시간을 계산해요'}</p>
+    </div>
+  );
   const togglePet = (id: string) => {
     setSelected((s) => {
       const next = s.includes(id) ? s.filter((x) => x !== id) : [...s, id];
-      const first = pets.find((p) => p.id === next[0]);
-      if (first) setIntervalMin(first.restIntervalMinutes);
+      // 선택한 반려견들의 적용 간격(수의사 안내 → 보호자 설정, 여러 마리면 가장 짧은 간격)
+      const sel = pets.filter((p) => next.includes(p.id));
+      if (sel.length) setIntervalMin(resolveRestPolicy(sel).intervalMinutes);
       return next;
     });
   };
@@ -109,6 +123,8 @@ export default function TripSetup() {
       destinationName: destText.trim() || null,
       destination: dest,
       restIntervalMinutes: interval,
+      restPolicy: interval === restPolicy.intervalMinutes ? restPolicy
+        : { ...restPolicy, intervalMinutes: interval, basis: 'guardian', reasons: [...restPolicy.reasons, `출발 전 보호자가 ${interval}분으로 조정`] },
       recordRoute,
       kind,
       demoSpeed: settings.demoSpeed,
@@ -226,6 +242,7 @@ export default function TripSetup() {
                   <span className="cf-custom"><button className="icon-btn" aria-label="5분 줄이기" onClick={() => setIntervalMin(Math.max(30, interval - 5))}>−</button><b className="num">{interval}분</b><button className="icon-btn" aria-label="5분 늘리기" onClick={() => setIntervalMin(Math.min(240, interval + 5))}>+</button></span>
                 </div>
               </div>
+              {restBasisBox}
               <div className="cf-row">
                 <Route size={22} color="var(--primary)" /><b>경유지 추천</b>
                 <span className="grow t-cap">경로 근처 반려견 동반 장소를 지도 아래에 추천해요</span>
@@ -345,6 +362,7 @@ export default function TripSetup() {
         <section>
           {step(4, `${mainPet ? callName(mainPet.name) : '우리 강아지'} 맞춤 휴식 계획`)}
           <RestIntervalPicker value={interval} onChange={setIntervalMin} />
+          <div className="mt-12">{restBasisBox}</div>
           <p className="t-cap mt-8">실제 주행 시간이 이 간격에 이르면 알려드려요. 신호 대기·정체는 휴식으로 세지 않아요.</p>
           {plan && (
             <div className="card mt-12" style={{ display: 'grid', gap: 18 }}>

@@ -114,3 +114,25 @@ describe('여행 라이프사이클 (데모, 600배속)', () => {
     expect((await repo.legsOf(id!)).map((l) => l.kind)).toEqual(['outbound']);
   }, 60_000);
 });
+
+describe('맞춤 휴식 기록', () => {
+  it('출발 시 휴식 근거 저장 · 간격 변경 이유 기록 · 추천 응답 기록', async () => {
+    const { TripControllerImpl } = await import('./TripController');
+    const c = new TripControllerImpl();
+    const p2: Pet = { ...pet, id: 'p2', name: '초코', restIntervalMinutes: 60 };
+    const r = await c.start({ pets: [pet, p2], destinationName: null, destination: null, restIntervalMinutes: 60, recordRoute: false, kind: 'demo', demoSpeed: 600, voice: false });
+    expect(r.ok).toBe(true);
+    const t0 = c.getSnapshot().trip!;
+    expect(t0.restPolicy?.intervalMinutes).toBe(60);
+    expect(t0.restPolicy?.petId).toBe('p2');
+    c.setRestInterval(75, 'pet-condition');
+    expect(c.getSnapshot().trip!.restIntervalChanges).toEqual([expect.objectContaining({ from: 60, to: 75, reason: 'pet-condition' })]);
+    await c.demoJump('restDue');
+    await new Promise((res) => setTimeout(res, 600));
+    const log = c.getSnapshot().trip!.restRecoLog!;
+    expect(log.at(-1)).toMatchObject({ kind: 'due', intervalMinutes: 75 });
+    c.logRestResponse('later');
+    expect(c.getSnapshot().trip!.restRecoLog!.at(-1)!.response).toBe('later');
+    await c.discard();
+  });
+});

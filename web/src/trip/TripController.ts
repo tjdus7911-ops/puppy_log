@@ -8,6 +8,7 @@
 // Provider → 엔진 → 저장소 흐름은 v1 과 같고, 앱이 꺼져도 스냅샷으로 어느 단계든 복원합니다.
 // Android 쪽 TripViewModel 에 같은 상태 구조를 옮길 예정입니다(docs/TRIP_LIFECYCLE.md).
 import { arrivalPush, queueEvent } from './events';
+import { hasCare, resolveRestPolicy, restDueVoice, restSoonVoice, type IntervalChangeReason, type RestPolicy, type RestRecoEntry, type RestRecoResponse } from '../domain/restCare';
 import { activityTime } from './activityTime';
 import { repo, type ActiveTripSnapshot } from '../data/db';
 import type { DriveLeg, GeoPoint, LegKind, Pet, PlaceCategory, RestSession, Trip, TripLocation, TripPhase } from '../domain/models';
@@ -30,6 +31,8 @@ export interface StartOptions {
   destinationName: string | null;
   destination: GeoPoint | null;
   restIntervalMinutes: number;
+  /** 휴식 추천 근거(없으면 반려견 정보로 계산) */
+  restPolicy?: RestPolicy;
   recordRoute: boolean;
   kind: StartKind;
   demoSpeed: number;
@@ -80,6 +83,8 @@ interface PersistMeta {
   petNames: string[];
   recordRoute: boolean;
   voice: boolean;
+  /** 케어 정보가 있는 반려견이 있으면 음성에 '여행 케어 설정' 표현 사용 */
+  care?: boolean;
   /** 이전에 끝난 구간 합계(현재 구간 엔진 값과 더해 여행 합계를 만듦) */
   base?: { distanceKm: number; drivingSec: number };
 }
@@ -133,9 +138,10 @@ export class TripControllerImpl {
         elapsedDurationSeconds: 0, restIntervalMinutes: o.restIntervalMinutes, status: 'stopped', diaryText: '',
         diarySource: 'none', memo: '', coverPhotoUri: null, source: provider.source, isDemo: provider.isSimulated,
         phase: 'outbound', arrivedAt: null, returnStartedAt: null, updatedAt: startTime, syncState: 'local-only',
+        restPolicy: o.restPolicy ?? resolveRestPolicy(o.pets, startTime), restRecoLog: [], restIntervalChanges: [],
       };
       this.trip = trip;
-      this.meta = { petNames: o.pets.map((p) => p.name), recordRoute: o.recordRoute, voice: o.voice, base: { distanceKm: 0, drivingSec: 0 } };
+      this.meta = { petNames: o.pets.map((p) => p.name), recordRoute: o.recordRoute, voice: o.voice, care: o.pets.some(hasCare), base: { distanceKm: 0, drivingSec: 0 } };
       this.attachLeg(this.newLeg('outbound', startTime, provider), provider, createEngine(startTime, o.restIntervalMinutes));
       const res = await provider.start(this.onSample);
       if (!res.ok) {
@@ -516,7 +522,6 @@ export class TripControllerImpl {
 
   private handle(ev: EngineEvent) {
     if (!this.trip || !this.leg) return;
-    const pet = callName(this.meta.petNames[0] ?? '우리 강아지');
     if (ev.type === 'point') {
       const p = { latitude: ev.latitude, longitude: ev.longitude };
       this.route.push(p);
@@ -530,11 +535,13 @@ export class TripControllerImpl {
       // 목적지(또는 집) 근처 도착 후에는 휴식 알림을 보내지 않음
     } else if (ev.type === 'restSoon') {
       this.reminder = { kind: 'soon', drivenMinutes: Math.floor((this.engine?.drivingSinceRestSec ?? 0) / 60), minutesLeft: ev.minutesLeft };
-      if (this.meta.voice) speak(`${pet}와 곧 쉬어갈 시간이에요.`);
+      this.logReco('soon');
+      if (this.meta.voice) speak(restSoonVoice(this.meta.petNames[0] ?? '우리 강아지'));
       queueMicrotask(() => this.emit(true));
     } else if (ev.type === 'restDue') {
       this.reminder = { kind: 'due', drivenMinutes: ev.drivenMinutes, minutesLeft: 0 };
-      if (this.meta.voice) speak(`${pet}와 ${ev.drivenMinutes}분 동안 이동했어요. 잠깐 쉬어갈까요?`);
+      this.logReco('due');
+      if (this.meta.voice) speak(restDueVoice(this.meta.petNames[0] ?? '우리 강아지', !!this.meta.care));
       queueMicrotask(() => this.emit(true));
     }
   }
@@ -615,11 +622,31 @@ export class TripControllerImpl {
     return true;
   }
 
-  /** 이번 여행의 휴식 알림 간격 변경(반려견 프로필 기본값은 그대로) */
-  setRestInterval(minutes: number) {
+  /** 휴식 추천 이력 기록(추천 시점·간격·근거) */
+  private logReco(kind: 'soon' | 'due') {
+    if (!this.trip || !this.engine) return;
+    const entry: RestRecoEntry = { at: this.engine.lastTick, kind, intervalMinutes: this.engine.restIntervalMin, basis: this.trip.restPolicy?.basis ?? 'guardian', drivenMinutes: Math.floor(this.engine.drivingSinceRestSec / 60), response: 'none' };
+    this.trip = { ...this.trip, restRecoLog: [...(this.trip.restRecoLog ?? []), entry].slice(-100) };
+  }
+
+  /** 휴식 추천에 대한 보호자 응답(가장 최근 추천에 기록) */
+  logRestResponse(response: RestRecoResponse) {
+    if (!this.trip?.restRecoLog?.length) return;
+    const log = [...this.trip.restRecoLog];
+    log[log.length - 1] = { ...log[log.length - 1], response };
+    this.trip = { ...this.trip, restRecoLog: log };
+    this.emit(true);
+    void this.persist();
+  }
+
+  /** 이번 여행의 휴식 알림 간격 변경(반려견 프로필 기본값은 그대로). 변경 이유를 기록합니다. */
+  setRestInterval(minutes: number, reason: IntervalChangeReason = 'other') {
     if (!this.engine || !this.trip) return;
+    const from = this.engine.restIntervalMin;
     this.engine = changeRestInterval(this.engine, minutes);
-    this.trip = { ...this.trip, restIntervalMinutes: this.engine.restIntervalMin };
+    const to = this.engine.restIntervalMin;
+    const changes = from === to ? (this.trip.restIntervalChanges ?? []) : [...(this.trip.restIntervalChanges ?? []), { at: this.engine.lastTick, from, to, reason }].slice(-50);
+    this.trip = { ...this.trip, restIntervalMinutes: to, restIntervalChanges: changes };
     this.emit(true);
     void this.persist();
   }

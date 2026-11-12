@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { TripController } from '../trip/TripController';
-import { Camera, Minus, Plus, Trash2 } from 'lucide-react';
+import { Camera, ChevronDown, HeartPulse, Minus, Plus, Trash2 } from 'lucide-react';
+import { careOf, hasCare, MAX_INTERVAL, MIN_INTERVAL, type Freq, type PetCare } from '../domain/restCare';
 import { useStore } from '../app/store';
 import { navigate, queryParam } from '../app/router';
 import { fileToDataUrl, pickImages } from '../app/image';
@@ -46,6 +47,9 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
   const [confirmDel, setConfirmDel] = useState(false);
 
   const set = <K extends keyof Pet>(k: K, v: Pet[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const care = careOf(form);
+  const setCare = (patch: Partial<PetCare>) => setForm((f) => ({ ...f, care: { ...careOf(f), ...patch, updatedAt: Date.now() } }));
+  const hasCareData = !!form.care && (care.senior != null || care.motionSickness != null || care.travelAnxiety != null || !!care.healthNotes || !!care.vetAdvice || care.vetRestIntervalMinutes != null);
   const nameError = touched && !form.name.trim() ? '이름을 입력해 주세요.' : null;
   const weightError = form.weight != null && (form.weight <= 0 || form.weight > 120) ? '몸무게를 확인해 주세요.' : null;
   const today = new Date().toISOString().slice(0, 10);
@@ -136,9 +140,37 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
         <span className="label" style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>기본 휴식 알림 간격</span>
         <RestIntervalPicker value={form.restIntervalMinutes} onChange={(v) => set('restIntervalMinutes', v)} />
         <div className="mt-12">
-          <Hint>휴식 간격은 의학적 기준이 아닌 예시 값이에요. 반려견의 나이·건강·컨디션에 맞게 보호자가 판단해 조정해 주세요.</Hint>
+          <Hint>기본값 90분은 의학적 기준이 아닌 앱의 출발점이에요. 반려견의 나이·건강·컨디션에 맞게 보호자가 판단해 조정해 주세요. 수의사에게 안내받은 간격이 있으면 아래 ‘여행 케어 정보’에 적어 두세요.</Hint>
         </div>
       </div>
+
+      {/* 여행 케어(모두 선택) — 휴식 간격 숫자는 바꾸지 않고, 수의사 안내 간격만 우선 적용 */}
+      <details className="care-box" open={!!form.care && hasCare(form)}>
+        <summary><HeartPulse size={18} /><span className="grow">여행 케어 정보 <span className="t-cap">(선택)</span></span><ChevronDown size={18} /></summary>
+        <p className="t-cap" style={{ margin: '4px 0 12px' }}>입력하지 않아도 모든 기능을 쓸 수 있어요. 진단이나 치료 지시가 아니며, 수의사 안내를 우선해요. 이 기기에만 저장돼요.</p>
+        <div className="care-row">
+          <span className="lb">노령견</span>
+          <Segmented ariaLabel="노령견 여부" value={care.senior == null ? 'unknown' : care.senior ? 'yes' : 'no'} onChange={(v: string) => setCare({ senior: v === 'unknown' ? null : v === 'yes' })} options={[{ value: 'unknown', label: '모름' }, { value: 'no', label: '아니요' }, { value: 'yes', label: '예' }]} />
+          <span className="t-cap">보호자 판단 또는 수의사 안내 기준 (앱이 나이로 판정하지 않아요)</span>
+        </div>
+        {([['motionSickness', '차멀미'], ['travelAnxiety', '차 이동 불안']] as const).map(([k, label]) => (
+          <div className="care-row" key={k}>
+            <span className="lb">{label}</span>
+            <Segmented ariaLabel={label} value={care[k] ?? 'unknown'} onChange={(v: string) => setCare({ [k]: v === 'unknown' ? null : (v as Freq) })} options={[{ value: 'unknown', label: '모름' }, { value: 'none', label: '없음' }, { value: 'sometimes', label: '가끔' }, { value: 'often', label: '자주' }]} />
+          </div>
+        ))}
+        <Field label="건강 관련 특이사항" optional>
+          <textarea className="input" maxLength={200} placeholder="예: 관절이 약해요" value={care.healthNotes} onChange={(e) => setCare({ healthNotes: e.target.value })} aria-label="건강 관련 특이사항" />
+        </Field>
+        <Field label="수의사에게 안내받은 이동·휴식 주의사항" optional>
+          <textarea className="input" maxLength={200} placeholder="예: 장거리 이동 시 자주 쉬어 가기" value={care.vetAdvice} onChange={(e) => setCare({ vetAdvice: e.target.value })} aria-label="수의사 안내 주의사항" />
+        </Field>
+        <Field label="수의사에게 안내받은 휴식 간격 (분)" optional>
+          <input type="number" inputMode="numeric" min={MIN_INTERVAL} max={MAX_INTERVAL} className="input" placeholder="안내받은 경우에만 입력" value={care.vetRestIntervalMinutes ?? ''} onChange={(e) => setCare({ vetRestIntervalMinutes: e.target.value === '' ? null : Math.max(MIN_INTERVAL, Math.min(MAX_INTERVAL, Number(e.target.value))) })} aria-label="수의사 안내 휴식 간격" />
+        </Field>
+        <p className="t-cap">입력하면 여행 시작 시 보호자 설정보다 이 간격을 먼저 적용해요.</p>
+        {hasCareData && <button type="button" className="btn ghost sm mt-8" onClick={() => set('care', undefined)}>케어 정보 모두 지우기</button>}
+      </details>
 
       {isFirst && (
         <button className="btn secondary block mt-24" disabled={busy} onClick={async () => {

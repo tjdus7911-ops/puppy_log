@@ -33,6 +33,7 @@ import type { MapMarker } from '../ui/MapView';
 import { DEMO_SPEEDS } from './TripSetup';
 import { addPhotosToTrip } from '../app/photos';
 import { TripScene, type SceneId } from '../ui/scenes';
+import { CHANGE_REASON_LABEL, placeFoundVoice, restDueTitle, restSoonVoice, type IntervalChangeReason } from '../domain/restCare';
 import { RestIntervalPicker } from './PetForm';
 import { openCarPreview } from '../CarPreview';
 
@@ -85,6 +86,7 @@ function rankPlaces(places: Place[], current: GeoPoint, planned: GeoPoint[]): Ro
       let score = (detour ?? dist) * 2 + dist;
       if (p.policy.smallDog === true || p.policy.largeDog === true) score -= 1.5;
       if (p.category === 'restArea' || p.category === 'park') score -= 1;
+      if (p.policy.parking === true) score -= 0.5; // 주차 확인된 곳 우선
       return { place: p, distanceKm: dist, detourKm: detour, extraMin: detour != null ? Math.max(1, Math.round((detour * 2) / 40 * 60)) : null, aheadKm: on ? on.aheadKm : null, score };
     })
     .filter((x): x is RouteRec & { score: number } => !!x)
@@ -105,8 +107,22 @@ export default function TripLive() {
   const [intervalSheet, setIntervalSheet] = useState(false);
   const [stateSheet, setStateSheet] = useState(false);
   const [placeDetail, setPlaceDetail] = useState<RouteRec | null>(null);
+  const [changeReason, setChangeReason] = useState<IntervalChangeReason>('pet-condition');
+  const placeVoiceDone = useRef<string>('');
   const [hazards, setHazards] = useState<{ list: Hazard[]; error: string | null }>({ list: [], error: null });
   const [recs, setRecs] = useState<RouteRec[]>([]);
+  // 휴식 시점 음성 다음에, 경로 근처 휴식 장소가 있으면 한 번만 안내(동반 확인된 곳만 '동반 가능'이라고 말함)
+  useEffect(() => {
+    if (!settings.voiceGuidance || live.reminder?.kind !== 'due') return;
+    const key = `${live.trip?.id}:${live.engine?.restCount ?? 0}:${live.reminder.drivenMinutes}`;
+    if (placeVoiceDone.current === key) return;
+    const near = recs.filter((r) => !(r.place.policy.smallDog === false && r.place.policy.largeDog === false) && (r.place.category === 'restArea' || r.place.category === 'park'));
+    if (!near.length) return;
+    placeVoiceDone.current = key;
+    const confirmed = near.some((r) => r.place.policy.smallDog === true || r.place.policy.largeDog === true);
+    const t = setTimeout(() => speak(placeFoundVoice(confirmed)), 6500);
+    return () => clearTimeout(t);
+  }, [live.reminder?.kind, live.reminder?.drivenMinutes, recs, settings.voiceGuidance]); // eslint-disable-line react-hooks/exhaustive-deps
   const [voice, setVoice] = useState<{ listening: boolean; text: string | null }>({ listening: false, text: null });
   const spoken = useRef(new Set<string>());
   /** 음성으로 찾은 장소 종류: 추천 카드에서 해당 장소만 강조(팝업 없음) */
@@ -417,16 +433,22 @@ export default function TripLive() {
     </section>
   );
 
+  // ── 맞춤 휴식 추천: 반려견 이름 · 근거 · 최소 조작(가까운 휴식 장소 / 나중에 알림) ──
+  const mainPetName = live.petNames[0] ?? '우리 강아지';
+  const basisLabel = live.trip.restIntervalChanges?.length ? '여행 중 조정' : live.trip.restPolicy ? (live.trip.restPolicy.basis === 'vet' ? '수의사 안내' : live.trip.restPolicy.basis === 'guardian' ? '보호자 설정' : '앱 기본값') : '보호자 설정';
+  const findRestPlace = () => { TripController.logRestResponse('find'); setRestSheet(['restArea', 'park']); };
+  const remindLater = () => { TripController.logRestResponse('later'); TripController.snoozeReminder(15); toast('15분 뒤에 다시 알려드릴게요.'); };
+
   // ── 얇은 휴식 상태 카드(지도 하단). 빨간색은 쓰지 않음 ──
   const restCard = dash === 'arrived' ? null : (
     <div className={`rest-line ${dash}`} role="status" aria-live="polite">
       <span className="ic">{dash === 'resting' ? <Timer size={18} /> : <PawPrint size={18} />}</span>
       <div className="grow" style={{ minWidth: 0 }}>
-        <p className="t num">{dash === 'resting' ? `휴식 중 · ${Math.max(0, Math.floor(restElapsed / 60))}분` : dash === 'due' ? '휴식할 시간이에요' : `다음 휴식까지 ${restMin}분`}
+        <p className="t num">{dash === 'resting' ? `휴식 중 · ${Math.max(0, Math.floor(restElapsed / 60))}분` : dash === 'due' ? restDueTitle(mainPetName) : `다음 휴식까지 ${restMin}분`}
           {(dash === 'driving' || dash === 'soon') && restAheadKm != null && <small> 약 {formatKm(restAheadKm)} 앞</small>}</p>
-        <p className="s">{dash === 'resting' ? '충분히 쉬고 출발해요 · 물과 산책을 챙겨 주세요' : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동했어요 · 아래 추천 장소를 확인해 보세요` : `${e.restIntervalMin}분 간격 알림 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
+        <p className="s">{dash === 'resting' ? '충분히 쉬고 출발해요 · 물과 산책을 챙겨 주세요' : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 알림 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
       </div>
-      {dash === 'due' && <button className="btn sm ghost" onClick={() => { TripController.snoozeReminder(15); toast('15분 뒤에 다시 알려드릴게요.'); }}>15분 뒤</button>}
+      {dash === 'due' && <span className="rl-acts"><button className="btn sm primary" onClick={findRestPlace}>가까운 휴식 장소</button><button className="btn sm ghost" onClick={remindLater}>나중에</button></span>}
       {(dash === 'driving' || dash === 'soon') && <span className="thin" aria-hidden="true"><i style={{ width: `${Math.min(100, (e.drivingSinceRestSec / Math.max(1, e.restIntervalMin * 60)) * 100)}%` }} /></span>}
     </div>
   );
@@ -547,18 +569,18 @@ export default function TripLive() {
                 {mapEl}
                 {dash === 'soon' && (
                   <button className="soon-banner" onClick={() => setRestSheet(['restArea', 'park'])}>
-                    <PawPrint size={22} /><span className="grow"><b>곧 휴식할 시간이에요!</b><small>약 {restMin}분 후{restSoonCount ? ` · 휴식지 ${restSoonCount}곳 추천` : ''}</small></span><ChevronRight size={20} />
+                    <PawPrint size={22} /><span className="grow"><b>{restSoonVoice(mainPetName).replace(/\.$/, '!')}</b><small>약 {restMin}분 후{restSoonCount ? ` · 휴식지 ${restSoonCount}곳 추천` : ''}</small></span><ChevronRight size={20} />
                   </button>
                 )}
                 {dash !== 'soon' && hzPill}
                 <div className={`rest-line ${dash}`} role="status" aria-live="polite">
                   <span className="ic">{dash === 'resting' ? <Timer size={18} /> : <PawPrint size={18} />}</span>
                   <div className="grow" style={{ minWidth: 0 }}>
-                    <p className="t num">{dash === 'resting' ? `휴식 중 · ${Math.max(0, Math.floor(restElapsed / 60))}분` : dash === 'due' ? '휴식할 시간이에요' : `다음 휴식까지 ${restMin}분`}
+                    <p className="t num">{dash === 'resting' ? `휴식 중 · ${Math.max(0, Math.floor(restElapsed / 60))}분` : dash === 'due' ? restDueTitle(mainPetName) : `다음 휴식까지 ${restMin}분`}
                       {(dash === 'driving' || dash === 'soon') && restAheadKm != null && <small> (약 {formatKm(restAheadKm)})</small>}</p>
-                    <p className="s">{dash === 'resting' ? '충분히 쉬고 출발해요' : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동했어요 · 신호 대기·일시 정차는 휴식으로 세지 않아요` : `${e.restIntervalMin}분 간격 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
+                    <p className="s">{dash === 'resting' ? '충분히 쉬고 출발해요' : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
                   </div>
-                  {dash === 'due' && <><button className="btn sm ghost" onClick={() => { TripController.snoozeReminder(15); toast('15분 뒤에 다시 알려드릴게요.'); }}>나중에</button>{(!driving || isDemo) && <button className="btn sm primary" onClick={() => TripController.beginRest()}>휴식 시작{driving ? ' (데모)' : ''}</button>}</>}
+                  {dash === 'due' && <><button className="btn sm primary" onClick={findRestPlace}>가까운 휴식 장소 찾기</button><button className="btn sm ghost" onClick={remindLater}>나중에 알림</button>{!driving && <button className="btn sm ghost" onClick={() => { TripController.logRestResponse('rest'); void TripController.beginRest(); }}>휴식 시작</button>}</>}
                   {dash === 'resting' && <><button className="btn sm ghost" onClick={async () => { const added = await addPhotosToTrip(live.trip!.id, (m: string) => toast(m, 'error')); if (added?.length) toast(`사진 ${added.length}장을 추가했어요.`); }}><Camera size={15} />사진</button><button className="btn sm ghost" onClick={() => setIntervalSheet(true)}><BellRing size={15} />알림 간격</button><button className="btn sm primary" onClick={async () => { const d = await TripController.finishRest(); toast(`휴식을 마쳤어요 · ${formatDuration(d)}`); }}>휴식 종료</button></>}
                   {(dash === 'driving' || dash === 'soon') && !driving && <button className="btn sm ghost" onClick={() => TripController.beginRest()}>휴식 시작</button>}
                   {(dash === 'driving' || dash === 'soon') && <span className="thin" aria-hidden="true"><i style={{ width: `${Math.min(100, (e.drivingSinceRestSec / Math.max(1, e.restIntervalMin * 60)) * 100)}%` }} /></span>}
@@ -642,7 +664,12 @@ export default function TripLive() {
         {driving && !isDemo ? (
           <div className="hint mt-16"><Lock size={15} />주행 중에는 간격을 바꿀 수 없어요. 휴식 중이나 정차 후에 바꿔 주세요. (현재 {e.restIntervalMin}분)</div>
         ) : (
-          <div className="mt-16"><RestIntervalPicker value={e.restIntervalMin} onChange={(v: number) => TripController.setRestInterval(v)} /></div>
+          <>
+            <div className="mt-16"><RestIntervalPicker value={e.restIntervalMin} onChange={(v: number) => TripController.setRestInterval(v, changeReason)} /></div>
+            <p style={{ fontWeight: 600 }} className="mt-16">바꾸는 이유 <span className="t-cap">(기록용)</span></p>
+            <div className="chips mt-8">{(Object.keys(CHANGE_REASON_LABEL) as IntervalChangeReason[]).map((k) => <button key={k} className={`chip ${changeReason === k ? 'on' : ''}`} onClick={() => setChangeReason(k)}>{CHANGE_REASON_LABEL[k]}</button>)}</div>
+            {(live.trip?.restIntervalChanges?.length ?? 0) > 0 && <p className="t-cap mt-8">이번 여행 변경 기록: {live.trip!.restIntervalChanges!.map((c) => `${c.from}→${c.to}분(${CHANGE_REASON_LABEL[c.reason]})`).join(', ')}</p>}
+          </>
         )}
         <button className="btn primary block mt-24" onClick={() => { setIntervalSheet(false); toast(`휴식 알림을 ${e.restIntervalMin}분 간격으로 맞췄어요.`); }}>확인</button>
       </Sheet>
@@ -658,7 +685,12 @@ export default function TripLive() {
                 <span><Car size={16} />{r.detourKm != null ? `경로 +${r.extraMin}분 · ${formatKm(r.detourKm)}` : `${formatKm(r.distanceKm)} · 추가 시간 미확인`}</span>
                 <span className={`pet-ok ${pl.c}`}>{pl.t}</span>
               </div>
-              <p className="t-cap mt-8">추가 거리·시간은 평균 속도로 계산한 추정값이에요. 동반 여부·운영 시간은 방문 전 확인해 주세요.</p>
+              <div className="pdx-facts">
+                <span>주차 <b>{r.place.policy.parking === true ? '가능' : r.place.policy.parking === false ? '불가' : '확인 필요'}</b></span>
+                <span>운영 시간 <b>{r.place.hours ?? '확인 필요'}</b></span>
+                <span>야외 동반 <b>{r.place.policy.outdoor === true ? '가능' : r.place.policy.outdoor === false ? '불가' : '확인 필요'}</b></span>
+              </div>
+              <p className="t-cap mt-8">추가 거리·시간은 평균 속도로 계산한 추정값이에요. 확인되지 않은 정보는 ‘확인 필요’로 표시해요. 방문 전 확인해 주세요.</p>
               <button className={`btn ${on ? 'ghost' : 'primary'} block xl mt-16`} onClick={() => { addWaypoint(r); setPlaceDetail(null); }}>{on ? '경유지에서 빼기' : '경유지로 추가'}</button>
               <p className="t-cap mt-8" style={{ textAlign: 'center' }}>{isDemo || r.place.isSample ? '데모: 지도에 경유지로 표시해요 · 실제 차량은 Pleos 내비 경유지 연동 후 지원' : '웹: 지도 앱으로 이 장소 길 안내를 열어요(내장 내비 경유지 미연동)'}</p>
             </div>

@@ -1,6 +1,8 @@
 // 요청서 13장 데이터 구조를 그대로 옮긴 도메인 모델입니다.
 // Android 앱의 Room Entity(android/.../data/local/entity)와 필드 이름을 맞춰 두었습니다.
 
+import type { IntervalChange, PetCare, RestPolicy, RestRecoEntry } from './restCare';
+
 export type PetSize = 'small' | 'medium' | 'large';
 
 export interface Pet {
@@ -15,6 +17,8 @@ export interface Pet {
   size: PetSize;
   notes: string;
   restIntervalMinutes: number;
+  /** 여행 케어(선택): 노령견·멀미·이동 불안·건강 특이사항·수의사 안내 */
+  care?: PetCare;
   createdAt: number;
 }
 
@@ -99,6 +103,10 @@ export interface Trip {
   /** 차량 앱 ↔ 모바일 앱 동기화 대비 필드. 동기화 서버가 없으므로 항상 'local-only' */
   updatedAt: number;
   syncState: 'local-only';
+  /** 휴식 추천 근거(출발 시 결정) · 추천 이력 · 여행 중 간격 변경 이유 */
+  restPolicy?: RestPolicy;
+  restRecoLog?: RestRecoEntry[];
+  restIntervalChanges?: IntervalChange[];
 }
 
 export interface TripPet {
