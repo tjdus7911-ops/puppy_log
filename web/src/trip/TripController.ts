@@ -558,8 +558,18 @@ export class TripControllerImpl {
   private cabinPrompt: CabinPrompt | null = null;
   private cabinTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** 차량 화면에서만 탑승 안전 안내를 씀(휴대폰 화면은 차량 데이터를 쓰지 않음) */
+  private cabinEnabled = true;
+  setCabinEnabled(on: boolean) {
+    if (this.cabinEnabled === on) return;
+    this.cabinEnabled = on;
+    if (!on) { this.cabinPrompt = null; setSpeechHold(false); }
+    this.cabinMemo = EMPTY_MEMO;
+    this.emit(true);
+  }
+
   private onCabin(c: CabinState, motion: Motion) {
-    if (!this.trip || !this.engine) return;
+    if (!this.trip || !this.engine || !this.cabinEnabled) return;
     const prevHold = this.cabin ? shouldHoldAlerts(this.cabin, this.cabinCaps) : false;
     this.cabin = c;
     const hold = shouldHoldAlerts(c, this.cabinCaps);
@@ -886,12 +896,12 @@ export class TripControllerImpl {
         restoredFromSnapshot: this.restored,
         lastError: this.lastError,
         recordRoute: this.meta.recordRoute,
-        cabin: this.cabin,
-        cabinCaps: this.cabinCaps,
+        cabin: this.cabinEnabled ? this.cabin : null,
+        cabinCaps: this.cabinEnabled ? this.cabinCaps : NO_CABIN,
         cabinPrompt: this.cabinPrompt,
-        heatCare: e?.status === 'resting' && this.cabin && this.cabinCaps.outsideTemp && isHot(this.cabin, !!this.meta.brachy) ? restHeatCare(callName(this.meta.petNames[0] ?? '우리 강아지')) : null,
+        heatCare: this.cabinEnabled && e?.status === 'resting' && this.cabin && this.cabinCaps.outsideTemp && isHot(this.cabin, !!this.meta.brachy) ? restHeatCare(callName(this.meta.petNames[0] ?? '우리 강아지')) : null,
         alertsHeld: this.cabin ? shouldHoldAlerts(this.cabin, this.cabinCaps) : false,
-        restPetStay: this.openRest ? this.openRest.petStayedInCar ?? null : undefined,
+        restPetStay: this.openRest && this.cabinEnabled ? this.openRest.petStayedInCar ?? null : undefined,
       };
     }
     for (const l of this.listeners) l();

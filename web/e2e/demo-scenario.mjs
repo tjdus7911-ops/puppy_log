@@ -135,6 +135,8 @@ try {
   });
 
   await step('차량 상태(데모): 창문 안내 · 더운 날 에어컨 · 뒷문 열림 휴식 확인', async () => {
+    await page.setViewportSize({ width: 1600, height: 900 }); // 차량 화면에서만 동작
+    await page.waitForTimeout(500);
     const ev = async (label) => { await page.locator('.demo-tag').first().click(); await page.locator('.st-opt', { hasText: label }).click(); };
     await ev('뒷좌석 창문 열림');
     await page.locator('[data-testid=cabin-prompt]', { hasText: '뒷좌석 창문이 많이 열려 있어요' }).waitFor({ timeout: 8000 });
@@ -150,7 +152,9 @@ try {
     await page.locator('.rest-line.resting').first().waitFor({ timeout: 5000 });
     await btn('휴식 종료').click();
     await page.waitForTimeout(500);
-    return '창문 안내 → 에어컨 켜짐 → 뒷문 휴식 시작·종료';
+    await page.setViewportSize({ width: 390, height: 844 });
+    if (await page.locator('[data-testid=cabin-prompt], .cabin-row, [data-testid=pet-stay]').count()) throw new Error('휴대폰 화면에 차량 상태 안내가 보임');
+    return '차량 화면: 창문 안내 → 에어컨 켜짐 → 뒷문 휴식 시작·종료 / 휴대폰 화면: 표시 없음';
   });
 
   await step('강릉 목적지 도착 → 여행지 활동(여행 계속)', async () => {

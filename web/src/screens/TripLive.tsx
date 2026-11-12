@@ -101,6 +101,8 @@ export default function TripLive() {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const { pets, settings, toast, reload } = useStore();
   const wide = useWide();
+  // 차량 상태 안내(창문·에어컨·뒷문·펫 모드)는 차량 화면에서만
+  useEffect(() => { TripController.setCabinEnabled(wide); }, [wide]);
   const [restSheet, setRestSheet] = useState<PlaceCategory[] | null>(null);
   const [endSheet, setEndSheet] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -498,7 +500,7 @@ export default function TripLive() {
   ) : null;
 
   // ── 얇은 휴식 상태 카드(지도 하단). 빨간색은 쓰지 않음 ──
-  const restCard = dash === 'arrived' ? null : safetyLine ?? (
+  const restCard = dash === 'arrived' ? null : (wide ? safetyLine : null) ?? (
     <div className={`rest-line ${dash}`} role="status" aria-live="polite">
       <span className="ic">{dash === 'resting' ? <Timer size={18} /> : <PawPrint size={18} />}</span>
       <div className="grow" style={{ minWidth: 0 }}>
@@ -690,7 +692,6 @@ export default function TripLive() {
       </div>
       <div className="drive-sheet">
         <span className="grab" aria-hidden="true" />
-        {petStayCard}
         {restCard}
         {progress != null && dash !== 'arrived' && (
           <div>
@@ -699,7 +700,6 @@ export default function TripLive() {
           </div>
         )}
         <div className="tiles3">{tiles}</div>
-        {cabinRow}
         {notices}
         {recSection}
         <div className="m-actions">{actions}</div>
