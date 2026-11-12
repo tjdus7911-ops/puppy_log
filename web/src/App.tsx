@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { BookOpen, Clock3, House, Navigation, PawPrint, Settings, UserRound, Users } from 'lucide-react';
+import { BookOpen, Clock3, House, Navigation, PawPrint, Send, Settings, UserRound, Users } from 'lucide-react';
 import { AppProvider, useStore } from './app/store';
 import { match, navigate, useRoute } from './app/router';
 import { useWide } from './app/useWide';
@@ -49,7 +49,7 @@ const TABS = [
 // 차량 왼쪽 메뉴(시안): 홈 · 여행/경로 · 내 반려견 · 여행 기록 · 설정 — 커뮤니티는 모바일 전용
 const CAR_TABS = [
   { key: 'home', label: '홈', icon: House, match: ['/home'] },
-  { key: 'move', label: '여행', icon: Navigation, match: ['/trip', '/trip/live', '/trip/setup', '/trip/destination', '/explore'] },
+  { key: 'move', label: '여행', icon: Send, match: ['/trip', '/trip/live', '/trip/setup', '/trip/destination', '/explore'] },
   { key: 'pets', label: '내 반려견', icon: PawPrint, match: ['/pets', '/pet'] },
   { key: 'record', label: '여행 기록', icon: Clock3, match: ['/album', '/pawmap', '/community'] },
   { key: 'settings', label: '설정', icon: Settings, match: ['/my'] },
@@ -167,7 +167,7 @@ function Shell() {
               </button>
             ))}
           </nav>
-          <main className={`shell-main ${fullBleed ? 'bleed' : ''}`}>{screen}</main>
+          <main className={`shell-main ${fullBleed ? 'bleed' : ''} ${path === '/home' ? 'home' : ''}`}>{screen}</main>
         </div>
         {pill}
         {toastsEl}
