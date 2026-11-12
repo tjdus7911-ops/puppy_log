@@ -4,7 +4,7 @@ import { DEMO_ROUTES, type DemoRouteKey } from './demoRoute';
 import type { CabinCapabilities, CabinState } from '../domain/cabin';
 
 /** 데모 차량 상태 이벤트(상태별 화면 테스트·자동 시나리오) */
-export type DemoCabinEvent = 'window-open' | 'heat' | 'rest-area-door' | 'turn-signal' | 'warning';
+export type DemoCabinEvent = 'window-open' | 'heat' | 'rest-area-door' | 'turn-signal' | 'warning' | 'engine-off';
 
 /** 데모 시나리오: 가는 길 약 15분 지점에 뒷좌석 창문 60% 열림 → 잠시 뒤 닫힘, 방향지시등 몇 번, 오는 길은 31℃·에어컨 꺼짐 */
 export const DEMO_CABIN_SCRIPT = {
@@ -48,7 +48,7 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
   readonly isSimulated = true;
   readonly capabilities = { location: true, speed: true, motionState: true, parkingState: true };
   /** 데모는 모든 탑승 공간 도메인을 시뮬레이션(주행 거리는 데모에서 위치 기록으로 계산 → odometer 미사용) */
-  readonly cabinCapabilities: CabinCapabilities = { window: true, door: true, hvac: true, hvacControl: true, outsideTemp: true, turnSignal: true, safety: true, odometer: false, ignition: true, brake: true };
+  readonly cabinCapabilities: CabinCapabilities = { window: true, door: true, hvac: true, hvacControl: true, outsideTemp: true, turnSignal: true, safety: true, odometer: false, ignition: true, brake: true, petMode: true };
 
   private st: DemoSnapshot;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -97,6 +97,12 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
     if (ev === 'heat') this.st.cabin = { ...c, outsideTempC: DEMO_CABIN_SCRIPT.returnHeat.peakC, acOn: false };
     if (ev === 'turn-signal') { this.st.cabin = { ...c, turnSignal: true }; this.st.turnLeftSec = real(DEMO_CABIN_SCRIPT.turnSignalSec); }
     if (ev === 'warning') { this.st.cabin = { ...c, vehicleWarning: true }; this.st.warnLeftSec = real(8); }
+    if (ev === 'engine-off') {
+      // 주차 후 시동 끔(뒷문은 열지 않음) → 90초(실제) 뒤 다시 시동·출발
+      this.st.parkLeftSec = real(90); this.st.doorOpenInSec = undefined; this.st.doorCloseInSec = undefined;
+      this.st.cabin = { ...c, parkingBrake: true, ignitionOn: false, rearDoorOpen: false };
+      this.currentSpeed = 0;
+    }
     if (ev === 'rest-area-door') {
       // 휴게소에 주차 → 2초 뒤 뒷문 열림 → 20초 뒤 닫힘. 휴식을 시작하지 않으면 60초 뒤 다시 출발
       this.st.parkLeftSec = real(60); this.st.doorOpenInSec = real(2); this.st.doorCloseInSec = undefined; this.doorCloseReal = real(20);
@@ -145,7 +151,7 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
 
   onRestChanged(resting: boolean) {
     this.st.resting = resting;
-    if (!resting) { this.st.parkLeftSec = undefined; this.st.doorOpenInSec = undefined; this.st.doorCloseInSec = undefined; this.st.cabin = { ...this.st.cabin!, parkingBrake: false, rearDoorOpen: false }; }
+    if (!resting) { this.st.parkLeftSec = undefined; this.st.doorOpenInSec = undefined; this.st.doorCloseInSec = undefined; this.st.cabin = { ...this.st.cabin!, parkingBrake: false, rearDoorOpen: false, ignitionOn: true }; }
     else this.st.cabin = { ...this.st.cabin!, parkingBrake: true };
     this.emit();
   }
@@ -186,7 +192,7 @@ export class DemoVehicleDataProvider implements VehicleDataProvider {
     if (this.st.parkLeftSec != null && !this.st.resting) {
       this.st.parkLeftSec -= h;
       this.currentSpeed = 0;
-      if (this.st.parkLeftSec <= 0) { this.st.parkLeftSec = undefined; this.st.cabin = { ...this.st.cabin!, parkingBrake: false, rearDoorOpen: false }; }
+      if (this.st.parkLeftSec <= 0) { this.st.parkLeftSec = undefined; this.st.cabin = { ...this.st.cabin!, parkingBrake: false, rearDoorOpen: false, ignitionOn: true }; }
       return;
     }
     if (this.st.resting || this.arrived) {

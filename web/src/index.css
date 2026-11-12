@@ -1634,3 +1634,12 @@ button.place-row { cursor: pointer; }
 .cabin-row em { font-style: normal; font-size: 11px; color: var(--text-3); }
 .cd.v5 .cabin-row { margin-top: 10px; }
 .drive-sheet .rest-line.safety { position: relative; left: auto; right: auto; bottom: auto; flex-wrap: wrap; }
+/* 휴식 시작 → 반려견을 차에 두고 내리는지 확인(펫 모드 안내) */
+.pet-stay-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,.97); box-shadow: var(--shadow), inset 0 0 0 1.5px rgba(59,110,240,.3); color: var(--primary); }
+.pet-stay-card p { color: var(--text); display: grid; min-width: 0; }
+.pet-stay-card p b { font-size: 15px; }
+.pet-stay-card p small { font-size: 12px; color: var(--text-2); }
+.car-map .pet-stay-card { position: absolute; left: 14px; right: 14px; bottom: 84px; z-index: 7; }
+.arr-note.leave { color: var(--primary); font-weight: 600; }
+.pm-steps { padding-left: 20px; display: grid; gap: 8px; font-size: 15px; line-height: 1.5; }
+.pm-notes { padding-left: 18px; display: grid; gap: 4px; }

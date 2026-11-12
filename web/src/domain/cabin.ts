@@ -50,17 +50,19 @@ export interface CabinCapabilities {
   odometer: boolean;
   ignition: boolean;
   brake: boolean;
+  /** 차량에 펫 모드 사양이 있음(멍로드는 켜는 방법만 안내, 직접 실행하지 않음) */
+  petMode: boolean;
 }
 
 export const NO_CABIN: CabinCapabilities = {
   window: false, door: false, hvac: false, hvacControl: false, outsideTemp: false,
-  turnSignal: false, safety: false, odometer: false, ignition: false, brake: false,
+  turnSignal: false, safety: false, odometer: false, ignition: false, brake: false, petMode: false,
 };
 
 export const CAPABILITY_LABEL: Record<keyof CabinCapabilities, string> = {
   window: '창문 상태(Window)', door: '문 상태(Door)', hvac: '공조 상태(HVAC)', hvacControl: '에어컨 켜기(HVAC 제어)',
   outsideTemp: '외기 온도(AAOS)', turnSignal: '방향지시등(TurnSignal)', safety: '차량 경고(Safety)',
-  odometer: '주행 거리계(Odometer)', ignition: '시동(AAOS)', brake: '주차 브레이크(Brake)',
+  odometer: '주행 거리계(Odometer)', ignition: '시동(AAOS)', brake: '주차 브레이크(Brake)', petMode: '펫 모드 사양',
 };
 
 // ── 기준값(초안 · 수의사 자문 전) ──
@@ -73,7 +75,7 @@ export const HEAT_TEMP_C = 28;
 /** 더위에 약한 단두종은 더 낮은 기온부터 */
 export const HEAT_TEMP_C_BRACHY = 25;
 
-export type CabinPromptKind = 'window' | 'heat' | 'door-rest';
+export type CabinPromptKind = 'window' | 'heat' | 'door-rest' | 'leave-check';
 
 export interface CabinPrompt {
   kind: CabinPromptKind;
@@ -93,9 +95,12 @@ export interface CabinMemo {
   /** 이번 정차에서 뒷문 휴식 확인을 이미 했는지(다시 움직이면 초기화) */
   doorAskedThisStop: boolean;
   lastDoorOpen: boolean;
+  /** 이번 정차에서 뒷문이 한 번이라도 열렸는지(반려견을 내렸을 가능성) */
+  doorOpenedThisStop?: boolean;
+  lastIgnitionOn?: boolean;
 }
 
-export const EMPTY_MEMO: CabinMemo = { windowNotified: false, heatAsked: false, doorAskedThisStop: false, lastDoorOpen: false };
+export const EMPTY_MEMO: CabinMemo = { windowNotified: false, heatAsked: false, doorAskedThisStop: false, lastDoorOpen: false, doorOpenedThisStop: false, lastIgnitionOn: true };
 
 export interface CabinContext {
   /** 주행 중(움직이는 중) */
@@ -138,6 +143,25 @@ export function heatText(tempC: number, petCall: string, canControl: boolean): s
 
 export const DOOR_REST_TEXT = '휴식 시작할까요?';
 
+/** 시동을 껐는데 이번 정차에서 뒷문이 열리지 않았을 때(반려견을 두고 내리지 않도록) */
+export function leaveCheckText(petCall: string, petMode: boolean): string {
+  return petMode
+    ? `${petCall}를 내리셨나요? 잠깐 차에 두고 내리면 펫 모드를 켜 주세요.`
+    : `${petCall}를 내리셨나요? 차 안에 혼자 두지 마세요.`;
+}
+
+/** 펫 모드 켜는 방법(현대·기아 인포테인먼트 매뉴얼 기준 요약). 멍로드는 실행하지 않고 안내만 함 */
+export const PET_MODE_STEPS = [
+  "기어를 'P'(주차)로 두세요. 주행 중에는 펫 모드가 실행되지 않아요.",
+  '차량 홈 화면에서 펫 모드를 누르고 작동 온도를 정하세요.',
+  '대기 화면에서 설정 온도를 확인한 뒤 내리세요.',
+] as const;
+export const PET_MODE_NOTES = [
+  '사양 적용 차량에서만 쓸 수 있고, 마이현대(블루링크) 가입과 통합계정 연동이 필요해요.',
+  '배터리를 쓰는 기능이라 잔량이 낮으면 꺼질 수 있어요. 짧은 시간만 사용하세요.',
+  '더운 날 장시간 두고 내리지 마세요.',
+] as const;
+
 /** 휴식 중 더운 날 함께 보여 줄 안내 */
 export function restHeatCare(petCall: string): string {
   return `더운 날이에요. ${petCall}에게 물을 주고 그늘에서 쉬어 가세요.`;
@@ -149,11 +173,18 @@ export function restHeatCare(petCall: string): string {
  */
 export function evaluateCabin(c: CabinState, memo: CabinMemo, ctx: CabinContext): { prompt: CabinPrompt | null; memo: CabinMemo } {
   const m: CabinMemo = { ...memo };
-  if (ctx.moving) m.doorAskedThisStop = false;
+  if (ctx.moving) { m.doorAskedThisStop = false; m.doorOpenedThisStop = false; }
+  if (c.rearDoorOpen === true) m.doorOpenedThisStop = true;
+  const ignitionOff = c.ignitionOn === false && memo.lastIgnitionOn !== false;
+  if (c.ignitionOn != null) m.lastIgnitionOn = c.ignitionOn;
   // 창문이 거의 닫히면 다시 안내할 수 있게 함
   if (c.rearWindowOpenPct != null && c.rearWindowOpenPct <= WINDOW_CLOSED_PCT) m.windowNotified = false;
   const doorOpened = c.rearDoorOpen === true && !memo.lastDoorOpen;
   m.lastDoorOpen = c.rearDoorOpen === true;
+  // 내리기 전 확인: 도착 후에도 동작(목적지·집에서 시동을 끄는 순간)
+  if (ctx.caps.ignition && ctx.caps.door && ignitionOff && !m.doorOpenedThisStop && (ctx.parked || ctx.arrived)) {
+    return { prompt: { kind: 'leave-check', text: leaveCheckText(ctx.petCall, ctx.caps.petMode), ask: true, priority: 'safety', at: ctx.now }, memo: m };
+  }
   if (ctx.arrived) return { prompt: null, memo: m };
 
   if (ctx.caps.window && ctx.moving && !m.windowNotified && (c.rearWindowOpenPct ?? 0) > WINDOW_OPEN_PCT) {

@@ -84,13 +84,15 @@ export interface LiveSnapshot {
   heatCare: string | null;
   /** 방향지시등·차량 경고로 알림을 미루는 중 */
   alertsHeld: boolean;
+  /** 진행 중인 휴식에서 반려견을 차에 두고 내렸는지(null = 아직 답 없음, undefined = 휴식 중 아님) */
+  restPetStay: boolean | null | undefined;
 }
 
 const EMPTY: LiveSnapshot = {
   active: false, phase: null, driving: false, legKind: null, trip: null, petNames: [], kind: null, engine: null, secondsUntilRest: 0,
   gpsLost: false, position: null, route: [], reminder: null, arrived: false, demoSpeed: 1, manualMotion: null,
   restoredFromSnapshot: false, lastError: null, recordRoute: true,
-  cabin: null, cabinCaps: NO_CABIN, cabinPrompt: null, heatCare: null, alertsHeld: false,
+  cabin: null, cabinCaps: NO_CABIN, cabinPrompt: null, heatCare: null, alertsHeld: false, restPetStay: undefined,
 };
 
 interface PersistMeta {
@@ -599,6 +601,9 @@ export class TripControllerImpl {
       return;
     } else if (!yes && pr.kind === 'heat' && this.meta.voice) {
       speak('알겠어요.', 'info');
+    } else if (pr.kind === 'leave-check') {
+      // 예 = 함께 내렸어요, 아니요 = 잠깐 두고 내려요(화면에서 펫 모드 안내를 보여 줌)
+      if (this.openRest) await this.setRestPetStay(!yes);
     }
     this.emit(true);
     void this.persist();
@@ -672,6 +677,14 @@ export class TripControllerImpl {
     await this.persist();
     this.emit(true);
     return true;
+  }
+
+  /** 휴식 중 반려견을 차에 두고 내렸는지 기록(펫 모드 안내) */
+  async setRestPetStay(stay: boolean) {
+    if (!this.openRest) return;
+    this.openRest = { ...this.openRest, petStayedInCar: stay };
+    try { await repo.saveRest(this.openRest); } catch (e) { this.lastError = (e as Error).message; }
+    this.emit(true);
   }
 
   async finishRest(): Promise<number> {
@@ -878,6 +891,7 @@ export class TripControllerImpl {
         cabinPrompt: this.cabinPrompt,
         heatCare: e?.status === 'resting' && this.cabin && this.cabinCaps.outsideTemp && isHot(this.cabin, !!this.meta.brachy) ? restHeatCare(callName(this.meta.petNames[0] ?? '우리 강아지')) : null,
         alertsHeld: this.cabin ? shouldHoldAlerts(this.cabin, this.cabinCaps) : false,
+        restPetStay: this.openRest ? this.openRest.petStayedInCar ?? null : undefined,
       };
     }
     for (const l of this.listeners) l();

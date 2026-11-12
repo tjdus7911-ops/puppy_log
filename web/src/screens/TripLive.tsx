@@ -34,6 +34,7 @@ import type { MapMarker } from '../ui/MapView';
 import { DEMO_SPEEDS } from './TripSetup';
 import { addPhotosToTrip } from '../app/photos';
 import { TripScene, type SceneId } from '../ui/scenes';
+import { PET_MODE_NOTES, PET_MODE_STEPS } from '../domain/cabin';
 import { BASIS_LABEL, CHANGE_REASON_LABEL, placeFoundVoice, restDueTitle, restSoonVoice, type IntervalChangeReason } from '../domain/restCare';
 import { RestIntervalPicker } from './PetForm';
 import { openCarPreview } from '../CarPreview';
@@ -109,6 +110,7 @@ export default function TripLive() {
   const [moreRecs, setMoreRecs] = useState(false);
   const [intervalSheet, setIntervalSheet] = useState(false);
   const [stateSheet, setStateSheet] = useState(false);
+  const [petModeSheet, setPetModeSheet] = useState(false);
   const [placeDetail, setPlaceDetail] = useState<RouteRec | null>(null);
   const [changeReason, setChangeReason] = useState<IntervalChangeReason>('pet-condition');
   const placeVoiceDone = useRef<string>('');
@@ -463,14 +465,24 @@ export default function TripLive() {
   const cp = live.cabinPrompt;
   const safetyLine = cp ? (
     <div className={`rest-line safety ${cp.kind}`} role="alert" data-testid="cabin-prompt">
-      <span className="ic">{cp.kind === 'window' ? <Wind size={18} /> : cp.kind === 'heat' ? <Thermometer size={18} /> : <DoorOpen size={18} />}</span>
+      <span className="ic">{cp.kind === 'window' ? <Wind size={18} /> : cp.kind === 'heat' ? <Thermometer size={18} /> : cp.kind === 'leave-check' ? <PawPrint size={18} /> : <DoorOpen size={18} />}</span>
       <div className="grow" style={{ minWidth: 0 }}>
         <p className="t">{cp.kind === 'door-rest' ? `${mainPetName ? `${callName(mainPetName)}와 ` : ''}휴식 시작할까요?` : cp.text}</p>
-        <p className="s">{cp.kind === 'window' ? '주행 중 뒷좌석 창문 상태 · 창문은 앱이 움직이지 않아요' : cp.kind === 'heat' ? `바깥 기온·공조 상태 기준${live.cabinCaps.hvacControl ? ' · ‘켜기’를 누를 때만 에어컨을 켜요' : ''}` : '휴게소 주차 중 뒷문이 열렸어요'}{isDemo ? ' · 데모 차량 상태' : ''}</p>
+        <p className="s">{cp.kind === 'leave-check' ? '시동을 껐는데 뒷문이 열리지 않았어요 · 차 안에 혼자 두지 마세요' : cp.kind === 'window' ? '주행 중 뒷좌석 창문 상태 · 창문은 앱이 움직이지 않아요' : cp.kind === 'heat' ? `바깥 기온·공조 상태 기준${live.cabinCaps.hvacControl ? ' · ‘켜기’를 누를 때만 에어컨을 켜요' : ''}` : '휴게소 주차 중 뒷문이 열렸어요'}{isDemo ? ' · 데모 차량 상태' : ''}</p>
       </div>
       {cp.kind === 'heat' && cp.ask && <><button className="btn sm primary" onClick={() => void TripController.answerCabinPrompt(true)}><Snowflake size={15} />에어컨 켜기</button><button className="btn sm ghost" onClick={() => void TripController.answerCabinPrompt(false)}>괜찮아요</button></>}
+      {cp.kind === 'leave-check' && <><button className="btn sm primary" onClick={() => void TripController.answerCabinPrompt(true)}>함께 내렸어요</button><button className="btn sm ghost" onClick={() => { void TripController.answerCabinPrompt(false); setPetModeSheet(true); }}>잠깐 두고 내려요</button></>}
       {cp.kind === 'door-rest' && <><button className="btn sm primary" onClick={() => void TripController.answerCabinPrompt(true)}>휴식 시작</button><button className="btn sm ghost" onClick={() => void TripController.answerCabinPrompt(false)}>아니요</button></>}
       {(cp.kind === 'window' || (cp.kind === 'heat' && !cp.ask)) && <button className="btn sm ghost" onClick={() => void TripController.answerCabinPrompt(false)}>확인</button>}
+    </div>
+  ) : null;
+  // 휴식 시작 → 반려견을 잠깐 차에 두고 내리는지 묻고, 그렇다면 펫 모드 안내(멍로드는 펫 모드를 직접 켜지 않음)
+  const petStayCard = resting && live.restPetStay === null && !cp ? (
+    <div className="pet-stay-card" data-testid="pet-stay">
+      <PawPrint size={18} />
+      <p className="grow"><b>{callName(mainPetName)}를 잠깐 차에 두고 내리시나요?</b><small>{live.cabinCaps.petMode ? '두고 내리면 펫 모드 켜는 방법을 알려 드려요' : '차 안에 혼자 두지 마세요'}</small></p>
+      <button className="btn sm ghost" onClick={() => void TripController.setRestPetStay(false)}>함께 내려요</button>
+      <button className="btn sm primary" onClick={() => { void TripController.setRestPetStay(true); setPetModeSheet(true); }}>두고 내려요</button>
     </div>
   ) : null;
   const cab = live.cabin; const caps = live.cabinCaps;
@@ -597,6 +609,7 @@ export default function TripLive() {
                   <div><span><Coffee size={16} />휴식 횟수</span><b className="num">{e.restCount}<small>회</small></b></div>
                   <div><span><PawPrint size={16} />함께한 반려견</span><b className="arr-pets">{tripPets.length ? tripPets.map((p) => <PetAvatar key={p.id} uri={p.photoUri} size={30} />) : null}<em>{joinNames(live.petNames)}</em></b></div>
                 </div>
+                <p className="arr-note leave">내리기 전에 {callName(mainPetName)}를 함께 내렸는지 확인해 주세요.{live.cabinCaps.petMode ? ' 잠깐 두고 내리면 펫 모드를 켜 주세요.' : ''} <button className="link" onClick={() => setPetModeSheet(true)}>펫 모드 안내</button></p>
                 <p className="arr-note">{isReturn ? '여행 완료를 누르면 기록이 확정되고 AI 여행 일기 초안이 만들어져요.' : '여행은 끝나지 않아요 · 여행지 활동(사진·방문 장소·메모)으로 이어져요. 전체 종료는 ‘여행 마무리’에서 해요.'}</p>
                 <div className="arr-acts">
                   {isReturn ? (
@@ -621,6 +634,7 @@ export default function TripLive() {
                 )}
                 {dash !== 'soon' && hzPill}
                 {safetyLine}
+                {petStayCard}
                 {!safetyLine && <div className={`rest-line ${dash}`} role="status" aria-live="polite">
                   <span className="ic">{dash === 'resting' ? <Timer size={18} /> : <PawPrint size={18} />}</span>
                   <div className="grow" style={{ minWidth: 0 }}>
@@ -629,7 +643,7 @@ export default function TripLive() {
                     <p className="s">{dash === 'resting' ? (live.heatCare ?? '충분히 쉬고 출발해요') : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
                   </div>
                   {dash === 'due' && <><button className="btn sm primary" onClick={findRestPlace}>가까운 휴식 장소 찾기</button><button className="btn sm ghost" onClick={remindLater}>나중에 알림</button>{!driving && <button className="btn sm ghost" onClick={() => { TripController.logRestResponse('rest'); void TripController.beginRest(); }}>휴식 시작</button>}</>}
-                  {dash === 'resting' && <><button className="btn sm ghost" onClick={async () => { const added = await addPhotosToTrip(live.trip!.id, (m: string) => toast(m, 'error')); if (added?.length) toast(`사진 ${added.length}장을 추가했어요.`); }}><Camera size={15} />사진</button><button className="btn sm ghost" onClick={() => setIntervalSheet(true)}><BellRing size={15} />알림 간격</button><button className="btn sm primary" onClick={async () => { const d = await TripController.finishRest(); toast(`휴식을 마쳤어요 · ${formatDuration(d)}`); }}>휴식 종료</button></>}
+                  {dash === 'resting' && <><button className="btn sm ghost" onClick={async () => { const added = await addPhotosToTrip(live.trip!.id, (m: string) => toast(m, 'error')); if (added?.length) toast(`사진 ${added.length}장을 추가했어요.`); }}><Camera size={15} />사진</button><button className="btn sm ghost" onClick={() => setPetModeSheet(true)}><PawPrint size={15} />펫 모드 안내</button><button className="btn sm ghost" onClick={() => setIntervalSheet(true)}><BellRing size={15} />알림 간격</button><button className="btn sm primary" onClick={async () => { const d = await TripController.finishRest(); toast(`휴식을 마쳤어요 · ${formatDuration(d)}`); }}>휴식 종료</button></>}
                   {(dash === 'driving' || dash === 'soon') && !driving && <button className="btn sm ghost" onClick={() => TripController.beginRest()}>휴식 시작</button>}
                   {(dash === 'driving' || dash === 'soon') && <span className="thin" aria-hidden="true"><i style={{ width: `${Math.min(100, (e.drivingSinceRestSec / Math.max(1, e.restIntervalMin * 60)) * 100)}%` }} /></span>}
                 </div>}
@@ -676,6 +690,7 @@ export default function TripLive() {
       </div>
       <div className="drive-sheet">
         <span className="grab" aria-hidden="true" />
+        {petStayCard}
         {restCard}
         {progress != null && dash !== 'arrived' && (
           <div>
@@ -762,13 +777,28 @@ export default function TripLive() {
         </div>
         <p className="h-sm mt-24" style={{ fontWeight: 700 }}>차량 상태 이벤트 <span className="t-cap">(Vehicle SDK·AAOS 시뮬레이션)</span></p>
         <div className="st-grid mt-12">
-          {([['window-open', '뒷좌석 창문 열림', '주행 중 60% → 창문 안내'], ['heat', '더운 날·에어컨 꺼짐', '바깥 31℃ → 에어컨 켜기 제안'], ['rest-area-door', '휴게소 주차·뒷문 열림', '“휴식 시작할까요?” 확인'], ['turn-signal', '방향지시등 작동', '6초 동안 음성 알림 미루기']] as const).map(([k, t, d]) => (
-            <button key={k} className="st-opt" disabled={!isDemo || dash === 'arrived' || (k === 'rest-area-door' && resting)}
+          {([['window-open', '뒷좌석 창문 열림', '주행 중 60% → 창문 안내'], ['heat', '더운 날·에어컨 꺼짐', '바깥 31℃ → 에어컨 켜기 제안'], ['rest-area-door', '휴게소 주차·뒷문 열림', '“휴식 시작할까요?” 확인'], ['turn-signal', '방향지시등 작동', '6초 동안 음성 알림 미루기'], ['engine-off', '주차·시동 끔(뒷문 안 열림)', '“사슴이를 내리셨나요?” · 펫 모드 안내']] as const).map(([k, t, d]) => (
+            <button key={k} className="st-opt" disabled={!isDemo || (dash === 'arrived' && k !== 'engine-off') || (k === 'rest-area-door' && resting)}
               onClick={() => { const ok = TripController.demoCabin(k); setStateSheet(false); if (!ok) toast('데모 주행 중에만 사용할 수 있어요.', 'error'); }}>
               <b>{t}</b><span>{d}</span>
             </button>
           ))}
         </div>
+      </Sheet>
+
+      <Sheet open={petModeSheet} onClose={() => setPetModeSheet(false)} labelledBy="pm-title">
+        <h2 id="pm-title" className="h-md">{callName(mainPetName)}를 잠깐 차에 두고 내릴 때</h2>
+        {live.cabinCaps.petMode ? (
+          <>
+            <p className="t-sub mt-8">차량의 <b>펫 모드</b>를 켜면 차 안 환경을 반려동물에 맞게 유지해요. 멍로드는 펫 모드를 직접 켜지 않고 켜는 방법만 안내해요.</p>
+            <ol className="pm-steps mt-16">{PET_MODE_STEPS.map((s) => <li key={s}>{s}</li>)}</ol>
+            <ul className="pm-notes mt-12">{PET_MODE_NOTES.map((s) => <li key={s} className="t-cap">{s}</li>)}</ul>
+          </>
+        ) : (
+          <p className="t-sub mt-8">이 차량에서 펫 모드 사양을 확인하지 못했어요. 반려견을 차 안에 혼자 두지 마세요.</p>
+        )}
+        {isDemo && <p className="t-cap mt-8">데모: 펫 모드 사양이 있는 차량으로 가정했어요.</p>}
+        <button className="btn primary block mt-24" onClick={() => setPetModeSheet(false)}>확인했어요</button>
       </Sheet>
 
       <NearbyRestSheet categories={restSheet} onClose={() => setRestSheet(null)} position={live.position} driving={driving} tripId={live.trip!.id} apiBase={settings.apiBaseUrl} />

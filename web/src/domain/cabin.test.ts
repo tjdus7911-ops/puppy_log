@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_CABIN, EMPTY_MEMO, evaluateCabin, heatThreshold, NO_CABIN, shouldHoldAlerts, type CabinCapabilities, type CabinContext, type CabinState } from './cabin';
 
-const ALL: CabinCapabilities = { window: true, door: true, hvac: true, hvacControl: true, outsideTemp: true, turnSignal: true, safety: true, odometer: true, ignition: true, brake: true };
+const ALL: CabinCapabilities = { window: true, door: true, hvac: true, hvacControl: true, outsideTemp: true, turnSignal: true, safety: true, odometer: true, ignition: true, brake: true, petMode: true };
 const ctx = (o: Partial<CabinContext> = {}): CabinContext => ({ moving: true, parked: false, resting: false, arrived: false, petCall: '사슴이', brachy: false, caps: ALL, now: 1, ...o });
 const cab = (o: Partial<CabinState> = {}): CabinState => ({ ...EMPTY_CABIN, rearWindowOpenPct: 0, rearDoorOpen: false, acOn: true, outsideTempC: 22, ...o });
 
@@ -58,6 +58,23 @@ describe('주차 중 뒷문 열림 → 휴식 시작 확인', () => {
     expect(evaluateCabin(cab({ rearDoorOpen: true }), EMPTY_MEMO, ctx({ moving: false, parked: false })).prompt).toBeNull();
     expect(evaluateCabin(cab({ rearDoorOpen: true }), EMPTY_MEMO, ctx({ moving: false, parked: true, resting: true })).prompt).toBeNull();
     expect(evaluateCabin(cab({ rearDoorOpen: true }), EMPTY_MEMO, ctx({ moving: false, parked: true, arrived: true })).prompt).toBeNull();
+  });
+});
+
+describe('내리기 전 확인(반려견을 두고 내리지 않게)', () => {
+  const parked = ctx({ moving: false, parked: true });
+  it('주차 중 시동을 끄는 순간, 이번 정차에서 뒷문이 열리지 않았으면 확인 + 펫 모드 안내', () => {
+    const r = evaluateCabin(cab({ ignitionOn: false }), { ...EMPTY_MEMO, lastIgnitionOn: true }, parked);
+    expect(r.prompt).toMatchObject({ kind: 'leave-check', ask: true, priority: 'safety', text: '사슴이를 내리셨나요? 잠깐 차에 두고 내리면 펫 모드를 켜 주세요.' });
+  });
+  it('뒷문을 열었으면(내렸을 가능성) 묻지 않음', () => {
+    let m = evaluateCabin(cab({ ignitionOn: true, rearDoorOpen: true }), EMPTY_MEMO, parked).memo;
+    m = evaluateCabin(cab({ ignitionOn: true, rearDoorOpen: false }), m, parked).memo;
+    expect(evaluateCabin(cab({ ignitionOn: false }), m, parked).prompt?.kind).not.toBe('leave-check');
+  });
+  it('목적지 도착 후에도 확인, 펫 모드 사양이 없으면 혼자 두지 말라고만 안내', () => {
+    const r = evaluateCabin(cab({ ignitionOn: false }), EMPTY_MEMO, ctx({ moving: false, parked: true, arrived: true, caps: { ...ALL, petMode: false } }));
+    expect(r.prompt?.text).toBe('사슴이를 내리셨나요? 차 안에 혼자 두지 마세요.');
   });
 });
 

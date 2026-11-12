@@ -139,6 +139,8 @@ export interface RestSession {
   legId?: string | null;
   /** 휴식 시작 방법(기획서 5장 RestSession): 화면 버튼 · 음성 · 주차 중 뒷문 열림 확인 */
   startMethod?: RestStartMethod;
+  /** 휴식 중 반려견을 잠깐 차에 두고 내렸는지(펫 모드 안내를 본 경우 true, 함께 내렸으면 false) */
+  petStayedInCar?: boolean | null;
 }
 
 export type RestStartMethod = 'button' | 'voice' | 'door';
