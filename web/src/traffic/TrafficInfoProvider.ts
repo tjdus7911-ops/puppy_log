@@ -100,3 +100,34 @@ export function hazardsAhead(hz: Hazard[], current: GeoPoint | null, driven: Geo
     return !passed;
   });
 }
+
+// ── 반려견 동승 기준 돌발 안내(기획서 3장) ──
+// 내비도 알려 주는 돌발 정보에 반려견 동승 상황을 더해 조금 더 일찍 감속을 권하고,
+// 정체 구간 앞에 휴게소가 있으면 미리 쉬어 가기를 제안합니다.
+const HAZARD_WHAT: Record<HazardType, string> = {
+  accident: '사고가 신고된 구간이에요', construction: '공사 구간이에요', debris: '낙하물 신고가 있는 구간이에요',
+  congestion: '정체 구간이에요', weather: '기상 상황에 유의할 구간이에요', other: '돌발 상황이 있는 구간이에요',
+};
+
+/** 거리 표기: 1km 미만은 100m 단위, 그 이상은 0.5km 단위 */
+export function distancePhrase(km: number): string {
+  if (km < 1) return `${Math.max(100, Math.round(km * 10) * 100)}m 앞`;
+  const r = Math.round(km * 2) / 2;
+  return `${Number.isInteger(r) ? r : r.toFixed(1)}km 앞`;
+}
+
+/**
+ * @param petSubject 조사를 붙인 반려견 호칭(예: '사슴이가'). 없으면 '반려견이'
+ * @param restAreaBefore 정체 구간보다 앞에 있는 휴게소·쉼터 이름(있으면 쉬어 가기 제안)
+ */
+export function hazardVoice(h: Pick<Hazard, 'type' | 'provenance'>, distanceKm: number, petSubject: string | null, restAreaBefore: string | null = null): string {
+  const who = petSubject ?? '반려견이';
+  const head = `${h.provenance === 'demo' ? '데모 정보입니다. ' : ''}${distancePhrase(distanceKm)} ${HAZARD_WHAT[h.type]}.`;
+  if (h.type === 'congestion') {
+    return restAreaBefore
+      ? `${head} 정체 전에 ${restAreaBefore}에서 쉬어 가는 건 어떨까요?`
+      : `${head} ${who} 타고 있으니 급제동하지 않게 미리 속도를 줄여 주세요.`;
+  }
+  if (h.type === 'weather') return `${head} ${who} 타고 있으니 평소보다 천천히 달려 주세요.`;
+  return `${head} ${who} 타고 있으니 미리 속도를 줄여 주세요.`;
+}

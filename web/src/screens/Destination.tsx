@@ -9,6 +9,7 @@ import { repo } from '../data/db';
 import { CATEGORY_LABEL, PHASE_LABEL, type PlaceCategory, type TripPhoto, type VisitedPlace } from '../domain/models';
 import { formatDuration, formatKm, formatTime } from '../domain/format';
 import { regionLabel } from '../domain/regions';
+import { josa, petNames as joinNames } from '../domain/tripText';
 import { TripController } from '../trip/TripController';
 import { completeTripWithDraft } from '../trip/completeTrip';
 import { Sheet } from '../ui/components';
@@ -85,7 +86,7 @@ export default function Destination() {
 
   const startReturn = async () => {
     setBusy(true);
-    const r = await TripController.startReturn({ demoSpeed: settings.demoSpeed });
+    const r = await TripController.startReturn({ demoSpeed: settings.demoSpeed, home: settings.homeLocation ?? null });
     setBusy(false);
     if (r.ok) navigate('/trip/live');
     else toast(r.message, 'error');
@@ -99,6 +100,8 @@ export default function Destination() {
     if (id) { await reload(); navigate(`/album/${id}?new=1`, { replace: true }); }
   };
 
+  const who = joinNames(live.petNames?.length ? live.petNames : []);
+  const homeAsk = `${who}${josa(who, '과', '와')} 집으로 갈까요?`;
   const heroPhoto = trip.coverPhotoUri ?? photos[photos.length - 1]?.photoUri ?? null;
   const events: TimelineItem[] = [
     ...(trip.arrivedAt ? [{ id: 'arr', at: trip.arrivedAt, icon: <Flag />, title: `${trip.destinationName ?? (trip.endLocation ? regionLabel(trip.endLocation) : '목적지')} 도착`, time: formatTime(trip.arrivedAt), sub: `가는 길 ${formatKm(trip.totalDistanceKm)} · 주행 ${formatDuration(trip.drivingDurationSeconds)}` }] : []),
@@ -167,8 +170,11 @@ export default function Destination() {
         </section>
 
         <section className="next-move">
-          <p style={{ fontWeight: 600, fontSize: 16 }}>여행을 이어갈까요?</p>
-          <button className="btn primary block xl" disabled={busy} onClick={startReturn}>돌아가는 길 기록 시작</button>
+          <p style={{ fontWeight: 600, fontSize: 16 }}>{homeAsk}</p>
+          <button className="btn primary block xl" disabled={busy} onClick={startReturn}>집으로 출발 · 돌아가는 길 기록</button>
+          <p className="t-cap" style={{ fontSize: 12 }}>
+            {trip.isDemo ? '데모: 서울(가상 집)까지 주행해요.' : settings.homeLocation ? `저장한 집 위치(${settings.homeLocation.name}) 근처에 오면 도착을 알려 드려요.` : <>집 위치를 저장하면 집 근처 도착을 알려 드려요. <button className="link" onClick={() => navigate('/my')}>집 위치 저장</button></>}
+          </p>
           <div className="btn-row">
             <button className="btn ghost" disabled={busy} onClick={startExtra}>다른 장소로 이동</button>
             <button className="btn ghost" disabled={busy} onClick={() => setFinishSheet(true)}>여행 마무리</button>

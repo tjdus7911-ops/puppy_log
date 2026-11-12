@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { TripController } from '../trip/TripController';
 import { Camera, ChevronDown, HeartPulse, Minus, Plus, Trash2 } from 'lucide-react';
-import { careOf, hasCare, MAX_INTERVAL, MIN_INTERVAL, type Freq, type PetCare } from '../domain/restCare';
+import { AGE_STAGE_LABEL, ageStage, breedLooksBrachy, careOf, CONDITION_LABEL, GUIDELINE_NOTE, guidelineInterval, hasCare, isGuardianInterval, MAX_INTERVAL, MIN_INTERVAL, SENIOR_FROM_YEARS, suggestSenior, type Freq, type HealthCondition, type PetCare } from '../domain/restCare';
 import { useStore } from '../app/store';
 import { navigate, queryParam } from '../app/router';
 import { fileToDataUrl, pickImages } from '../app/image';
@@ -49,6 +49,13 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
   const set = <K extends keyof Pet>(k: K, v: Pet[K]) => setForm((f) => ({ ...f, [k]: v }));
   const care = careOf(form);
   const setCare = (patch: Partial<PetCare>) => setForm((f) => ({ ...f, care: { ...careOf(f), ...patch, updatedAt: Date.now() } }));
+  const guide = guidelineInterval(form);
+  const guardianSet = isGuardianInterval(form);
+  const shownInterval = guardianSet || !guide ? form.restIntervalMinutes : guide.minutes;
+  const setInterval = (v: number) => setForm((f) => ({ ...f, restIntervalMinutes: v, care: { ...careOf(f), guardianInterval: true, updatedAt: Date.now() } }));
+  const useGuide = () => guide && setForm((f) => ({ ...f, restIntervalMinutes: guide.minutes, care: { ...careOf(f), guardianInterval: false, updatedAt: Date.now() } }));
+  const seniorSug = suggestSenior(form);
+  const stage = ageStage(form);
   const hasCareData = !!form.care && (care.senior != null || care.motionSickness != null || care.travelAnxiety != null || !!care.healthNotes || !!care.vetAdvice || care.vetRestIntervalMinutes != null);
   const nameError = touched && !form.name.trim() ? '이름을 입력해 주세요.' : null;
   const weightError = form.weight != null && (form.weight <= 0 || form.weight > 120) ? '몸무게를 확인해 주세요.' : null;
@@ -73,6 +80,9 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
     setBusy(true);
     const ok = await savePet({
       ...form,
+      // 보호자가 직접 고치지 않았으면 기준표 추천값을 저장(다른 화면에서도 같은 값)
+      restIntervalMinutes: shownInterval,
+      care: form.care || guide ? { ...careOf(form), guardianInterval: guardianSet } : undefined,
       name: form.name.trim(),
       birthDate: ageMode === 'birth' ? form.birthDate : null,
       ageYears: ageMode === 'age' ? form.ageYears : null,
@@ -136,23 +146,46 @@ export default function PetForm({ id, route }: { id: string; route: string }) {
         <textarea className="input" maxLength={300} placeholder="예: 차멀미가 있어요, 창밖 보는 걸 좋아해요" value={form.notes} onChange={(e) => set('notes', e.target.value)} />
       </Field>
 
+      {/* 휴식 간격 기준표(기획서 3장 · 초안) — 나이 단계·단두종·건강 상태로 추천, 보호자가 확인·수정 */}
+      <div className="field guide-box">
+        <span className="label" style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>휴식 간격 추천 정보 <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>(선택)</span></span>
+        <div className="care-row">
+          <span className="lb">노령견</span>
+          <Segmented ariaLabel="노령견 여부" value={care.senior == null ? 'auto' : care.senior ? 'yes' : 'no'} onChange={(v: string) => setCare({ senior: v === 'auto' ? null : v === 'yes' })} options={[{ value: 'auto', label: '자동 제안' }, { value: 'no', label: '아니요' }, { value: 'yes', label: '예' }]} />
+          <span className="t-cap">{seniorSug == null ? '나이를 입력하면 체급 기준으로 제안해요' : `나이·체급 기준 제안: ${seniorSug ? '노령견' : '노령견 아님'} (${PET_SIZE_LABEL[form.size]} ${SENIOR_FROM_YEARS[form.size]}살부터)`}{stage ? ` · 현재 ${AGE_STAGE_LABEL[stage]}` : ''}</span>
+        </div>
+        <div className="care-row">
+          <span className="lb">단두종</span>
+          <Segmented ariaLabel="단두종 여부" value={care.brachycephalic == null ? 'auto' : care.brachycephalic ? 'yes' : 'no'} onChange={(v: string) => setCare({ brachycephalic: v === 'auto' ? null : v === 'yes' })} options={[{ value: 'auto', label: '자동 제안' }, { value: 'no', label: '아니요' }, { value: 'yes', label: '예' }]} />
+          <span className="t-cap">퍼그·불독·프렌치 불독·시추 등 얼굴이 납작한 견종{care.brachycephalic == null && form.breed ? ` · 견종 기준 제안: ${breedLooksBrachy(form.breed) ? '단두종' : '해당 없음'}` : ''}</span>
+        </div>
+        <div className="care-row">
+          <span className="lb">건강 상태</span>
+          <Segmented ariaLabel="건강 상태" value={care.condition ?? 'unset'} onChange={(v: string) => setCare({ condition: v === 'unset' ? null : (v as HealthCondition) })} options={[{ value: 'unset', label: '선택 안 함' }, ...(Object.keys(CONDITION_LABEL) as HealthCondition[]).map((k) => ({ value: k, label: CONDITION_LABEL[k] }))]} />
+        </div>
+        <p className="t-cap" style={{ marginTop: 4 }}>건강 상태는 휴식 간격 추천에만 쓰고 이 기기에만 저장해요. 공유 카드·커뮤니티에는 표시하지 않아요.</p>
+      </div>
+
       <div className="field">
-        <span className="label" style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>기본 휴식 알림 간격</span>
-        <RestIntervalPicker value={form.restIntervalMinutes} onChange={(v) => set('restIntervalMinutes', v)} />
+        <span className="label" style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>휴식 알림 간격</span>
+        {guide && (
+          <div className={`guide-reco ${guardianSet ? 'off' : ''}`} data-testid="guide-reco">
+            <p className="t"><b>추천 {guide.minutes}분</b> · 기준표 추천(초안){guide.items.length > 1 ? ' · 여러 조건 중 가장 짧은 간격' : ''}</p>
+            <ul>{guide.items.map((i) => <li key={i.id}>{i.label} {i.minutes}분 — {i.tip}</li>)}</ul>
+            <details><summary className="t-cap">근거 자료</summary><ul className="t-cap">{guide.items.map((i) => <li key={i.id}>{i.source}</li>)}</ul></details>
+            {guardianSet && <button type="button" className="btn ghost sm mt-8" onClick={useGuide}>추천값 {guide.minutes}분 사용</button>}
+          </div>
+        )}
+        <RestIntervalPicker value={shownInterval} onChange={setInterval} />
         <div className="mt-12">
-          <Hint>기본값 90분은 의학적 기준이 아닌 앱의 출발점이에요. 반려견의 나이·건강·컨디션에 맞게 보호자가 판단해 조정해 주세요. 수의사에게 안내받은 간격이 있으면 아래 ‘여행 케어 정보’에 적어 두세요.</Hint>
+          <Hint>{guide ? `${guardianSet ? '보호자가 정한 간격을 써요. ' : '추천값을 그대로 쓰거나 고칠 수 있어요. '}${GUIDELINE_NOTE}` : `나이나 건강 상태를 입력하면 기준표로 간격을 추천해요. 지금은 앱 기본값 ${shownInterval}분이에요.`} 수의사에게 안내받은 간격이 있으면 아래 ‘여행 케어 정보’에 적어 두세요. 그 간격이 가장 먼저 적용돼요.</Hint>
         </div>
       </div>
 
-      {/* 여행 케어(모두 선택) — 휴식 간격 숫자는 바꾸지 않고, 수의사 안내 간격만 우선 적용 */}
+      {/* 여행 케어(모두 선택) — 멀미·불안·메모는 확인 안내만, 수의사 안내 간격은 최우선 적용 */}
       <details className="care-box" open={!!form.care && hasCare(form)}>
         <summary><HeartPulse size={18} /><span className="grow">여행 케어 정보 <span className="t-cap">(선택)</span></span><ChevronDown size={18} /></summary>
         <p className="t-cap" style={{ margin: '4px 0 12px' }}>입력하지 않아도 모든 기능을 쓸 수 있어요. 진단이나 치료 지시가 아니며, 수의사 안내를 우선해요. 이 기기에만 저장돼요.</p>
-        <div className="care-row">
-          <span className="lb">노령견</span>
-          <Segmented ariaLabel="노령견 여부" value={care.senior == null ? 'unknown' : care.senior ? 'yes' : 'no'} onChange={(v: string) => setCare({ senior: v === 'unknown' ? null : v === 'yes' })} options={[{ value: 'unknown', label: '모름' }, { value: 'no', label: '아니요' }, { value: 'yes', label: '예' }]} />
-          <span className="t-cap">보호자 판단 또는 수의사 안내 기준 (앱이 나이로 판정하지 않아요)</span>
-        </div>
         {([['motionSickness', '차멀미'], ['travelAnxiety', '차 이동 불안']] as const).map(([k, label]) => (
           <div className="care-row" key={k}>
             <span className="lb">{label}</span>

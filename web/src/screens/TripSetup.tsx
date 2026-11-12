@@ -23,7 +23,7 @@ import { PlaceRow, Stat } from '../ui/kit';
 import { callName } from '../domain/tripText';
 import { SafetyCheck } from './SafetyCheck';
 import { RestIntervalPicker } from './PetForm';
-import { BASIS_LABEL, resolveRestPolicy } from '../domain/restCare';
+import { BASIS_LABEL, GUIDELINE_NOTE, resolveRestPolicy } from '../domain/restCare';
 
 export const DEMO_SPEEDS = [1, 10, 30, 60, 120, 300];
 
@@ -95,7 +95,8 @@ export default function TripSetup() {
   const restBasisBox = (
     <div className="rest-basis">
       <p className="b"><b>{interval}분</b> 간격 · {basisNow}{restPolicy.basis === 'vet' && interval !== restPolicy.intervalMinutes && <span className="warn"> (수의사 안내 {restPolicy.intervalMinutes}분과 달라요)</span>}</p>
-      {restPolicy.reasons.length > 1 && <p className="t-cap">{restPolicy.reasons[1]}</p>}
+      {restPolicy.reasons.slice(1).map((r) => <p key={r} className="t-cap">{r}</p>)}
+      {restPolicy.basis === 'guideline' && interval === restPolicy.intervalMinutes && <p className="t-cap">{GUIDELINE_NOTE}</p>}
       {restPolicy.prompts.length > 0 && (
         <ul className="care-prompts">{restPolicy.prompts.map((pr) => <li key={pr.petId + pr.ruleId}>{pr.text}</li>)}</ul>
       )}

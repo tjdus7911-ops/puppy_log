@@ -1,7 +1,7 @@
 // 맞춤 휴식 추천 정책: 다양한 반려견 조건
 import { describe, expect, it } from 'vitest';
 import type { Pet } from './models';
-import { EMPTY_CARE, hasCare, petInterval, placeFoundVoice, REST_RULES, resolveRestPolicy, restDueTitle, restDueVoice, restSoonVoice } from './restCare';
+import { ageStage, breedLooksBrachy, EMPTY_CARE, guidelineInterval, hasCare, suggestSenior, petInterval, placeFoundVoice, REST_RULES, resolveRestPolicy, restDueTitle, restDueVoice, restSoonVoice } from './restCare';
 
 const pet = (o: Partial<Pet> = {}): Pet => ({ id: o.name ?? 'p', name: '사슴', photoUri: null, birthDate: null, ageYears: null, weight: null, size: 'small', notes: '', restIntervalMinutes: 90, createdAt: 1, ...o });
 
@@ -20,7 +20,7 @@ describe('적용 간격 우선순위', () => {
   });
 });
 
-describe('케어 정보는 간격 숫자를 바꾸지 않음(전문가 검토 전)', () => {
+describe('보호자가 정한 간격은 케어 정보로 바뀌지 않음', () => {
   it('노령견·멀미·불안·건강 메모가 있어도 간격은 보호자 설정 그대로, 확인 안내만 추가', () => {
     const p = pet({ restIntervalMinutes: 100, care: { ...EMPTY_CARE, senior: true, motionSickness: 'often', travelAnxiety: 'sometimes', healthNotes: '관절이 약함' } });
     const pol = resolveRestPolicy([p]);
@@ -68,5 +68,50 @@ describe('음성·화면 문구', () => {
   it('측정·진단처럼 들리는 표현을 쓰지 않음', () => {
     const all = [restDueVoice('사슴', true), restDueVoice('사슴', false), restSoonVoice('사슴'), ...REST_RULES.map((r) => r.message('사슴이'))].join(' ');
     expect(all).not.toMatch(/피로도|측정|진단|치료|위험합니다|해야 합니다/);
+  });
+});
+
+describe('휴식 간격 기준표(기획서 초안) 자동 추천', () => {
+  const NOW = new Date('2026-11-12T12:00:00').getTime();
+  it('성견·특이사항 없음 → 120분', () => {
+    const p = pet({ ageYears: 4, care: { ...EMPTY_CARE, condition: 'none' } });
+    expect(petInterval(p, NOW)).toEqual({ minutes: 120, basis: 'guideline' });
+  });
+  it('어린 강아지는 월령이 낮을수록 짧게(3개월 60 · 6개월 75 · 10개월 90)', () => {
+    expect(guidelineInterval(pet({ birthDate: '2026-08-10' }), NOW)?.minutes).toBe(60);
+    expect(guidelineInterval(pet({ birthDate: '2026-05-01' }), NOW)?.minutes).toBe(75);
+    expect(guidelineInterval(pet({ birthDate: '2026-01-01' }), NOW)?.minutes).toBe(90);
+    expect(ageStage(pet({ birthDate: '2026-01-01' }), NOW)).toBe('puppy');
+  });
+  it('노령견은 나이·체급으로 제안(소형 10살·중형 8살·대형 7살), 보호자 확인값이 우선', () => {
+    expect(suggestSenior(pet({ ageYears: 9, size: 'medium' }), NOW)).toBe(true);
+    expect(suggestSenior(pet({ ageYears: 9, size: 'small' }), NOW)).toBe(false);
+    expect(petInterval(pet({ ageYears: 9, size: 'medium' }), NOW)).toEqual({ minutes: 90, basis: 'guideline' });
+    expect(petInterval(pet({ ageYears: 9, size: 'medium', care: { ...EMPTY_CARE, senior: false } }), NOW).minutes).toBe(120);
+  });
+  it('단두종은 견종 이름으로 제안 → 90분', () => {
+    expect(breedLooksBrachy('프렌치 불독')).toBe(true);
+    expect(breedLooksBrachy('말티즈')).toBe(false);
+    expect(petInterval(pet({ ageYears: 3, breed: '퍼그' }), NOW).minutes).toBe(90);
+  });
+  it('여러 조건이 겹치면 가장 짧은 간격(노령견 90 + 신장 질환·당뇨 60 → 60)', () => {
+    const g = guidelineInterval(pet({ ageYears: 12, care: { ...EMPTY_CARE, condition: 'kidney-diabetes' } }), NOW);
+    expect(g?.minutes).toBe(60);
+    expect(g?.items.map((i) => i.id).sort()).toEqual(['cond-kd', 'senior']);
+    expect(g?.items.every((i) => i.source.length > 10)).toBe(true); // 항목마다 근거 자료
+  });
+  it('보호자가 직접 고치면 보호자 설정, 수의사 안내 간격이 있으면 그보다 우선', () => {
+    const base = { ageYears: 12, care: { ...EMPTY_CARE, condition: 'kidney-diabetes' as const } };
+    expect(petInterval(pet({ ...base, restIntervalMinutes: 100, care: { ...base.care, guardianInterval: true } }), NOW)).toEqual({ minutes: 100, basis: 'guardian' });
+    expect(petInterval(pet({ ...base, care: { ...base.care, vetRestIntervalMinutes: 45 } }), NOW)).toEqual({ minutes: 45, basis: 'vet' });
+  });
+  it('나이·건강 정보가 없으면 기준표를 쓰지 않고 앱 기본값', () => {
+    expect(guidelineInterval(pet(), NOW)).toBeNull();
+    expect(petInterval(pet(), NOW).basis).toBe('app-default');
+  });
+  it('기준표 추천이면 정책 이유에 항목이 남음', () => {
+    const pol = resolveRestPolicy([pet({ ageYears: 9, size: 'medium' })], NOW);
+    expect(pol.basis).toBe('guideline');
+    expect(pol.reasons.join(' ')).toContain('노령견 90분');
   });
 });

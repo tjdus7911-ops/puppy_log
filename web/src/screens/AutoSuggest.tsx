@@ -60,13 +60,13 @@ export function AutoSuggest({ live, settings, planned, voiceRequest, toast }: Pr
       const pick = pickSuggestion(cands, { trigger, enabled: trigger === 'voice' ? cats : settings.autoRecoCategories, suggested: suggested.current });
       lastAt.current[trigger] = e?.drivingSec ?? 0;
       if (!pick) {
-        if (trigger === 'voice') speak('경로 앞쪽에서 들를 만한 장소를 찾지 못했어요.');
+        if (trigger === 'voice') speak('경로 앞쪽에서 들를 만한 장소를 찾지 못했어요.', 'rest');
         return;
       }
       const full = { ...(pick as RecoCandidate & { place: Place }), trigger };
       suggested.current.add(pick.id); // 같은 장소 반복 추천 금지
       setSug(full);
-      if (settings.voiceGuidance) speak(`${full.place.isSample ? '샘플 데이터입니다. ' : ''}${suggestionSentence(pick)}`);
+      if (settings.voiceGuidance) speak(`${full.place.isSample ? '샘플 데이터입니다. ' : ''}${suggestionSentence(pick)}`, 'place');
     } finally {
       busy.current = false;
     }

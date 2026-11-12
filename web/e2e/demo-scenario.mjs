@@ -172,7 +172,7 @@ try {
   });
 
   await step('돌아가는 길 기록 시작', async () => {
-    await btn('돌아가는 길 기록 시작').click();
+    await btn('집으로 출발 · 돌아가는 길 기록').click();
     await page.locator('.tiles3').waitFor({ timeout: 15000 });
     await page.getByText(/돌아가는 중/).first().waitFor();
     await shot('10-return-driving');

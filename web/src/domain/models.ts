@@ -179,6 +179,10 @@ export interface AppSettings {
   skipRestNearArrival: boolean;
   /** 대표 반려견(홈 환영 문구·나의 반려견 카드). 없거나 삭제됐으면 첫 번째 반려견 */
   mainPetId?: string | null;
+  /** 반려견 동승 기준 돌발 상황 음성 안내(기본 켬) */
+  hazardAlerts?: boolean;
+  /** 집 위치(오는 길 안내용). 이 기기에만 저장, 공유 카드·커뮤니티에 넣지 않음 */
+  homeLocation?: { name: string; latitude: number; longitude: number; savedAt: number } | null;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

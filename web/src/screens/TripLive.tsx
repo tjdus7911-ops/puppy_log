@@ -19,7 +19,8 @@ import { DEMO_RETURN_ROUTE, DEMO_ROUTE, DEMO_ROUTES } from '../vehicle/demoRoute
 import { getPlaceProvider, sortByDistance } from '../places/providers';
 import type { Place } from '../places/PlaceSearchProvider';
 import { openNavigation } from '../places/navigation';
-import { getTrafficProvider, hazardsAhead, HAZARD_LABEL, HAZARD_VOICE, type Hazard, type HazardType } from '../traffic/TrafficInfoProvider';
+import { useOnline } from '../app/useOnline';
+import { getTrafficProvider, hazardsAhead, hazardVoice, HAZARD_LABEL, type Hazard, type HazardType } from '../traffic/TrafficInfoProvider';
 import { routeSnapshot } from '../nav/NavigationProvider';
 import { listenOnce, parseIntent, speechRecognitionSupported, type VoiceIntent } from '../trip/voice';
 import { speak } from '../trip/speech';
@@ -33,7 +34,7 @@ import type { MapMarker } from '../ui/MapView';
 import { DEMO_SPEEDS } from './TripSetup';
 import { addPhotosToTrip } from '../app/photos';
 import { TripScene, type SceneId } from '../ui/scenes';
-import { CHANGE_REASON_LABEL, placeFoundVoice, restDueTitle, restSoonVoice, type IntervalChangeReason } from '../domain/restCare';
+import { BASIS_LABEL, CHANGE_REASON_LABEL, placeFoundVoice, restDueTitle, restSoonVoice, type IntervalChangeReason } from '../domain/restCare';
 import { RestIntervalPicker } from './PetForm';
 import { openCarPreview } from '../CarPreview';
 
@@ -93,6 +94,8 @@ function rankPlaces(places: Place[], current: GeoPoint, planned: GeoPoint[]): Ro
     .sort((a, b) => a.score - b.score);
 }
 
+const VOICE_CHIP: Partial<Record<VoiceIntent, string>> = { 'rest-area': '주변 휴식 장소 찾아줘', 'rest-left': '다음 휴식까지?', later: '나중에 알려줘', 'rest-start': '휴식 시작' };
+
 export default function TripLive() {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const { pets, settings, toast, reload } = useStore();
@@ -110,6 +113,7 @@ export default function TripLive() {
   const [changeReason, setChangeReason] = useState<IntervalChangeReason>('pet-condition');
   const placeVoiceDone = useRef<string>('');
   const [hazards, setHazards] = useState<{ list: Hazard[]; error: string | null }>({ list: [], error: null });
+  const online = useOnline();
   const [recs, setRecs] = useState<RouteRec[]>([]);
   // 휴식 시점 음성 다음에, 경로 근처 휴식 장소가 있으면 한 번만 안내(동반 확인된 곳만 '동반 가능'이라고 말함)
   useEffect(() => {
@@ -120,7 +124,7 @@ export default function TripLive() {
     if (!near.length) return;
     placeVoiceDone.current = key;
     const confirmed = near.some((r) => r.place.policy.smallDog === true || r.place.policy.largeDog === true);
-    const t = setTimeout(() => speak(placeFoundVoice(confirmed)), 6500);
+    const t = setTimeout(() => speak(placeFoundVoice(confirmed), 'place'), 6500);
     return () => clearTimeout(t);
   }, [live.reminder?.kind, live.reminder?.drivenMinutes, recs, settings.voiceGuidance]); // eslint-disable-line react-hooks/exhaustive-deps
   const [voice, setVoice] = useState<{ listening: boolean; text: string | null }>({ listening: false, text: null });
@@ -152,17 +156,22 @@ export default function TripLive() {
   // 전방 3km 이내 위험 정보는 한 번만 간결하게 음성 안내(팝업 없음)
   const ahead = useMemo(() => hazardsAhead(hazards.list, live.position, live.route, 30), [hazards.list, live.position, live.route]);
   useEffect(() => {
-    if (!settings.voiceGuidance || !live.position) return;
-    // 안내 시점: 차속에 따라 약 90초 전(최소 1.5km, 최대 4km). 같은 위험 정보는 한 번만.
+    if (!settings.voiceGuidance || settings.hazardAlerts === false || !live.position) return;
+    // 반려견 동승 기준: 내비보다 조금 이르게(차속 기준 약 120초 전, 최소 2km·최대 5km) 안내. 같은 위험 정보는 한 번만.
     const kmh = live.engine?.lastFix && live.route.length > 1 ? 90 : 60;
-    const announceKm = Math.max(1.5, Math.min(4, (kmh * 90) / 3600));
+    const announceKm = Math.max(2, Math.min(5, (kmh * 120) / 3600));
     for (const h of ahead) {
-      if (spoken.current.has(h.id) || haversineKm(live.position, h) > announceKm) continue;
+      const d = haversineKm(live.position, h);
+      if (spoken.current.has(h.id) || d > announceKm) continue;
       spoken.current.add(h.id);
-      speak(`${h.provenance === 'demo' ? '데모 정보입니다. ' : ''}${HAZARD_VOICE[h.type]}`);
+      const name = live.petNames[0];
+      const subjName = name ? `${callName(name)}${josa(callName(name), '이', '가')}` : null;
+      // 정체 구간보다 앞에 있는 휴게소·쉼터(경로 이탈이 적은 곳)를 쉬어 가기 후보로
+      const before = h.type === 'congestion' ? recs.find((r) => (r.place.category === 'restArea' || r.place.category === 'park') && r.distanceKm < d && (r.detourKm == null || r.detourKm <= 1.5)) : undefined;
+      speak(hazardVoice(h, d, subjName, before?.place.name ?? null), 'safety');
       break;
     }
-  }, [ahead, live.position, settings.voiceGuidance]);
+  }, [ahead, live.position, settings.voiceGuidance, settings.hazardAlerts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 근처 휴식 장소 추천: 위치가 5km 이상 바뀌면 갱신
   // (위치 샘플마다 검색을 취소하지 않도록, 진행 중인 검색이 있으면 건너뛰고 화면을 떠날 때만 무시)
@@ -240,14 +249,24 @@ export default function TripLive() {
     else if (intent === 'rest-area' || intent === 'cafe') {
       const cats: PlaceCategory[] = intent === 'cafe' ? ['cafe'] : ['restArea', 'park'];
       const hit = petRecs.find((r) => cats.includes(r.place.category));
+      if (intent === 'rest-area' && dash === 'due') TripController.logRestResponse('find');
       if (driving) {
         setVoiceFocus(cats[0]);
         answer = hit ? `${hit.place.name}, ${hit.detourKm != null ? `경로에서 ${formatKm(hit.detourKm)} 떨어져 있어요` : `${formatKm(hit.distanceKm)} 거리예요`}. 추천 카드에 표시했어요.` : '경로 근처에서 찾지 못했어요. 조금 더 가면 다시 찾아볼게요.';
       } else { setRestSheet(cats); answer = intent === 'cafe' ? `${mainPet}와 갈 수 있는 카페를 찾아볼게요. 동반 여부는 방문 전 확인해 주세요.` : '가까운 휴식 장소를 찾아볼게요.'; }
     }
-    else answer = '잘 알아듣지 못했어요. "가까운 휴게소 찾아줘"처럼 말해 주세요.';
-    speak(answer);
-    setVoice({ listening: false, text: `${heard ? `“${heard}” → ` : ''}${answer}` });
+    else if (intent === 'later') {
+      if (dash === 'due' || dash === 'soon') { remindLater(); answer = '알겠어요. 15분 뒤에 다시 알려 드릴게요.'; }
+      else answer = '지금은 휴식 알림이 없어요.';
+    }
+    else if (intent === 'rest-start') {
+      if (resting) answer = '이미 휴식 중이에요.';
+      else if (driving && !isDemo) answer = '차를 세운 뒤에 휴식을 시작할 수 있어요.';
+      else { if (dash === 'due') TripController.logRestResponse('rest'); void TripController.beginRest(); answer = ''; }
+    }
+    else answer = '잘 알아듣지 못했어요. "주변 휴식 장소 찾아줘", "휴식 시작", "나중에 알려줘"처럼 말해 주세요.';
+    if (answer) speak(answer, 'rest');
+    setVoice({ listening: false, text: `${heard ? `“${heard}” → ` : ''}${answer || '휴식을 시작했어요.'}` });
   };
 
   const onVoice = async () => {
@@ -294,6 +313,7 @@ export default function TripLive() {
       <span className="ellipsis">{firstHz && live.position ? `${formatKm(haversineKm(live.position, firstHz))} 앞 ${HAZARD_LABEL[firstHz.type]}${firstHz.lanes ? ` · ${firstHz.lanes}` : ''}` : '전방 위험 정보 없음'}</span>
       {traffic.provenance === 'demo' && <span className="badge sample">데모</span>}
       {hazards.error && <span className="badge warn" title={hazards.error}>오류</span>}
+      {!online && <span className="badge warn" title="네트워크 연결이 끊겨 미리 받아 둔 정보로 안내해요">오프라인</span>}
     </button>
   );
   const planned = isDemo ? (isReturn ? DEMO_RETURN_ROUTE : isExtra ? DEMO_ROUTES.local.points : DEMO_ROUTE) : [];
@@ -355,9 +375,9 @@ export default function TripLive() {
   );
   const voiceChips = (
     <div className="chips" style={{ justifyContent: 'center', gap: 6 }}>
-      {(['rest-area', 'cafe', 'rest-left'] as VoiceIntent[]).map((it) => (
+      {(['rest-area', 'cafe', 'rest-left', ...(!resting && !live.arrived && left <= 10 * 60 ? ['later'] : []), ...(!resting ? ['rest-start'] : [])] as VoiceIntent[]).map((it) => (
         <button key={it} className="chip" style={{ fontSize: 12.5, minHeight: 30, padding: '0 10px' }} onClick={() => runIntent(it, null)}>
-          {it === 'rest-area' ? '가까운 휴게소' : it === 'cafe' ? `${mainPet}랑 갈 카페` : '다음 휴식까지?'}
+          {VOICE_CHIP[it] ?? (it === 'cafe' ? `${mainPet}랑 갈 카페` : it)}
         </button>
       ))}
     </div>
@@ -435,7 +455,7 @@ export default function TripLive() {
 
   // ── 맞춤 휴식 추천: 반려견 이름 · 근거 · 최소 조작(가까운 휴식 장소 / 나중에 알림) ──
   const mainPetName = live.petNames[0] ?? '우리 강아지';
-  const basisLabel = live.trip.restIntervalChanges?.length ? '여행 중 조정' : live.trip.restPolicy ? (live.trip.restPolicy.basis === 'vet' ? '수의사 안내' : live.trip.restPolicy.basis === 'guardian' ? '보호자 설정' : '앱 기본값') : '보호자 설정';
+  const basisLabel = live.trip.restIntervalChanges?.length ? '여행 중 조정' : live.trip.restPolicy ? (live.trip.restPolicy.basis === 'guideline' ? '기준표 추천' : BASIS_LABEL[live.trip.restPolicy.basis]) : '보호자 설정';
   const findRestPlace = () => { TripController.logRestResponse('find'); setRestSheet(['restArea', 'park']); };
   const remindLater = () => { TripController.logRestResponse('later'); TripController.snoozeReminder(15); toast('15분 뒤에 다시 알려드릴게요.'); };
 

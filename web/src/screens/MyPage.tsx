@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
-import { ChevronRight, FlaskConical, MonitorSmartphone, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 , Map as MapIcon } from 'lucide-react';
+import { petInterval } from '../domain/restCare';
+import { House, ChevronRight, FlaskConical, MonitorSmartphone, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 , Map as MapIcon } from 'lucide-react';
 import { realStats, useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { repo } from '../data/db';
 import { formatDuration, formatKm, ageFrom } from '../domain/format';
 import { CATEGORY_LABEL, mapJsKey, PET_SIZE_LABEL, type PlaceCategory } from '../domain/models';
 import { storageMode } from '../data/db';
+import { regionLabel } from '../domain/regions';
 import { speechRecognitionSupported } from '../trip/voice';
 import { TripController } from '../trip/TripController';
 import { Hint, Sheet, Switch, TopBar } from '../ui/components';
@@ -18,6 +20,21 @@ type Wipe = 'demo' | 'trips' | 'all' | null;
 
 export default function MyPage() {
   const { pets, trips, settings, updateSettings, reload, toast } = useStore();
+  const [locBusy, setLocBusy] = useState(false);
+  const saveHome = () => {
+    if (!('geolocation' in navigator)) { toast('이 기기에서는 위치를 확인할 수 없어요.', 'error'); return; }
+    setLocBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const p = { latitude: Math.round(pos.coords.latitude * 1e5) / 1e5, longitude: Math.round(pos.coords.longitude * 1e5) / 1e5 };
+        updateSettings({ homeLocation: { name: `집 · ${regionLabel(p)}`, ...p, savedAt: Date.now() } });
+        setLocBusy(false);
+        toast('집 위치를 이 기기에 저장했어요.');
+      },
+      (err) => { setLocBusy(false); toast(err.code === 1 ? '위치 권한이 없어 집 위치를 저장하지 못했어요.' : '위치를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.', 'error'); },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  };
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const stats = realStats(trips);
   const regions = new Set(trips.filter((t) => !t.isDemo && t.status === 'ended' && t.endLocation).map((t) => t.endLocation!.regionName)).size;
@@ -72,7 +89,7 @@ export default function MyPage() {
               <PetAvatar uri={p.photoUri} size={48} />
               <div className="grow">
                 <p style={{ fontWeight: 700 }}>{p.name}</p>
-                <p className="t-cap">{[PET_SIZE_LABEL[p.size], ageFrom(p.birthDate, p.ageYears), p.weight ? `${p.weight}kg` : null, `휴식 ${p.restIntervalMinutes}분`].filter(Boolean).join(' · ')}</p>
+                <p className="t-cap">{[PET_SIZE_LABEL[p.size], ageFrom(p.birthDate, p.ageYears), p.weight ? `${p.weight}kg` : null, `휴식 ${petInterval(p).minutes}분`].filter(Boolean).join(' · ')}</p>
               </div>
               <ChevronRight size={18} color="var(--text-3)" />
             </button>
@@ -128,6 +145,12 @@ export default function MyPage() {
           </div>
           <div className="row-item" style={{ display: 'block' }}>
             <div className="row">
+              <div className="grow"><p style={{ fontWeight: 650 }}>돌발 상황 음성 안내</p><p className="t-cap">공사·사고·정체를 반려견 동승 기준으로 조금 일찍 알려 드려요</p></div>
+              <Switch checked={settings.hazardAlerts !== false} onChange={(v) => updateSettings({ hazardAlerts: v })} label="돌발 상황 음성 안내" />
+            </div>
+          </div>
+          <div className="row-item" style={{ display: 'block' }}>
+            <div className="row">
               <div className="grow"><p style={{ fontWeight: 650 }}>주행 중 장소 자동 추천</p><p className="t-cap">휴식 알림·식사 시간·음성 요청 때 경로 앞쪽 한 곳만 추천해요</p></div>
               <Switch checked={settings.autoRecommend} onChange={(v) => updateSettings({ autoRecommend: v })} label="주행 중 장소 자동 추천" />
             </div>
@@ -158,6 +181,17 @@ export default function MyPage() {
             )}
             {live.active && <p className="t-cap mt-8">진행 중인 여행에는 바뀐 설정이 적용되지 않아요.</p>}
           </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <h2 className="h-md" style={{ marginBottom: 12 }}>집 위치</h2>
+        <div className="card" data-testid="home-loc">
+          <div className="row"><House size={20} color="var(--primary)" /><p className="grow" style={{ fontWeight: 650 }}>{settings.homeLocation ? settings.homeLocation.name : '저장한 집 위치가 없어요'}</p>
+            {settings.homeLocation && <button className="btn ghost sm" onClick={() => { updateSettings({ homeLocation: null }); toast('집 위치를 지웠어요.'); }}>지우기</button>}
+          </div>
+          <p className="t-sub mt-12">돌아오는 길에 집 근처 도착을 알려 드릴 때만 써요. 이 기기에만 저장하고 공유 카드·커뮤니티·여행 기록에는 넣지 않아요. 집에서 저장해 주세요.</p>
+          <button className="btn secondary block mt-12" disabled={locBusy} onClick={saveHome}>{locBusy ? '위치 확인 중…' : settings.homeLocation ? '현재 위치로 다시 저장' : '현재 위치를 집으로 저장'}</button>
         </div>
       </section>
 

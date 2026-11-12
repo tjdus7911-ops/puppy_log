@@ -23,6 +23,7 @@ import { DemoVehicleDataProvider, type DemoSnapshot } from '../vehicle/DemoVehic
 import { DeviceLocationDataProvider, ManualDataProvider } from '../vehicle/otherProviders';
 import type { VehicleDataProvider } from '../vehicle/VehicleDataProvider';
 import { speak } from './speech';
+import { haversineKm } from '../domain/geo';
 
 export type StartKind = 'demo' | 'device-location' | 'manual';
 
@@ -87,7 +88,12 @@ interface PersistMeta {
   care?: boolean;
   /** 이전에 끝난 구간 합계(현재 구간 엔진 값과 더해 여행 합계를 만듦) */
   base?: { distanceKm: number; drivingSec: number };
+  /** 오는 길 도착 판정용 집 위치(이 기기 로컬 상태에만 보관, 여행 기록에는 넣지 않음) */
+  home?: GeoPoint | null;
 }
+
+/** 실제 위치 기반 구간에서 목적지(또는 집) 근처 도착으로 보는 거리 */
+export const ARRIVE_RADIUS_KM = 0.3;
 
 export class TripControllerImpl {
   private snap: LiveSnapshot = EMPTY;
@@ -214,7 +220,8 @@ export class TripControllerImpl {
   }
 
   // ─────────────────────── 복귀 이동 / 추가 이동 ───────────────────────
-  startReturn(opts: { demoSpeed?: number; kind?: StartKind } = {}) {
+  startReturn(opts: { demoSpeed?: number; kind?: StartKind; home?: GeoPoint | null } = {}) {
+    this.meta = { ...this.meta, home: opts.home ?? null };
     return this.startLeg('return', opts);
   }
 
@@ -531,17 +538,27 @@ export class TripControllerImpl {
       if (this.meta.recordRoute) {
         this.pendingLocs.push({ id: newId(), tripId: this.trip.id, legId: this.leg.id, ...p, timestamp: ev.timestamp, accuracy: ev.accuracy });
       }
+      // 실제 위치 구간: 목적지(가는 길) 또는 저장한 집(오는 길) 근처에 오면 도착 안내(데모는 시뮬레이터가 처리)
+      if (!this.arrived && !(this.provider instanceof DemoVehicleDataProvider)) {
+        const target = this.leg.kind === 'outbound' ? this.trip.destination : this.leg.kind === 'return' ? this.meta.home ?? null : null;
+        if (target && haversineKm(p, target) <= ARRIVE_RADIUS_KM) {
+          this.arrived = true;
+          this.reminder = null;
+          if (this.meta.voice) speak(this.leg.kind === 'return' ? '집 근처에 도착했어요. 여행을 완료하려면 여행 완료를 눌러 주세요.' : '목적지 근처에 도착했어요. 도착을 누르면 여행지 활동을 기록할 수 있어요.');
+          queueMicrotask(() => this.emit(true));
+        }
+      }
     } else if ((ev.type === 'restSoon' || ev.type === 'restDue') && this.arrived) {
       // 목적지(또는 집) 근처 도착 후에는 휴식 알림을 보내지 않음
     } else if (ev.type === 'restSoon') {
       this.reminder = { kind: 'soon', drivenMinutes: Math.floor((this.engine?.drivingSinceRestSec ?? 0) / 60), minutesLeft: ev.minutesLeft };
       this.logReco('soon');
-      if (this.meta.voice) speak(restSoonVoice(this.meta.petNames[0] ?? '우리 강아지'));
+      if (this.meta.voice) speak(restSoonVoice(this.meta.petNames[0] ?? '우리 강아지'), 'rest');
       queueMicrotask(() => this.emit(true));
     } else if (ev.type === 'restDue') {
       this.reminder = { kind: 'due', drivenMinutes: ev.drivenMinutes, minutesLeft: 0 };
       this.logReco('due');
-      if (this.meta.voice) speak(restDueVoice(this.meta.petNames[0] ?? '우리 강아지', !!this.meta.care));
+      if (this.meta.voice) speak(restDueVoice(this.meta.petNames[0] ?? '우리 강아지', !!this.meta.care), 'rest');
       queueMicrotask(() => this.emit(true));
     }
   }

@@ -4,6 +4,7 @@
 //  - 최근 7일 안에 완료한 여행  → 여행 완료 홈(+ 일반 홈 항목)
 //  - 그 외                     → 일반 홈
 import { useState, useSyncExternalStore } from 'react';
+import { petInterval } from '../domain/restCare';
 import { Bell, BellRing, BookImage, Image as ImageIcon, MapPinned, MonitorSmartphone, ChevronRight, Coffee, Navigation, Search, Share2, ShieldCheck, Sparkles, Trees, Waves } from 'lucide-react';
 import { REGIONS } from '../domain/regions';
 import { SAFETY_ITEMS } from '../domain/plan';
@@ -65,7 +66,7 @@ function CarIdlePanel() {
   const pet = pets[0];
   const actions = [
     { icon: Navigation, t: '스마트 주행', s: '목적지·휴식 계획 세우기', go: () => navigate(pet ? '/trip/setup' : '/pet/new') },
-    { icon: BellRing, t: '휴식 알림', s: pet ? `${pet.restIntervalMinutes}분 간격 · 바꾸기` : '간격 설정', go: () => navigate(pet ? `/pet/${pet.id}` : '/my') },
+    { icon: BellRing, t: '휴식 알림', s: pet ? `${petInterval(pet).minutes}분 간격 · 바꾸기` : '간격 설정', go: () => navigate(pet ? `/pet/${pet.id}` : '/my') },
     { icon: MapPinned, t: '동반 장소 추천', s: '근처 반려견 동반 장소', go: () => navigate('/explore') },
   ];
   return (
