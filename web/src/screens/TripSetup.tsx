@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Car, Check, ChevronRight, Clock3, FlaskConical, MapPin, PawPrint, Plus, Route, Search, ShieldCheck, X } from 'lucide-react';
+import { Car, Coffee, Check, ChevronRight, Clock3, FlaskConical, MapPin, PawPrint, Plus, Route, Search, ShieldCheck, X } from 'lucide-react';
 import { useStore } from '../app/store';
 import { navigate, queryParam, useRoute } from '../app/router';
 import { planRests, SAFETY_ITEMS } from '../domain/plan';
 import { getPlaceProvider, sortByDistance } from '../places/providers';
 import type { Place } from '../places/PlaceSearchProvider';
 import { REGIONS } from '../domain/regions';
-import type { GeoPoint } from '../domain/models';
+import { ROUTE_OPTION_LABEL, type GeoPoint, type RouteOption } from '../domain/models';
 import { TripController, type StartKind } from '../trip/TripController';
 import { DEMO_DESTINATION, DEMO_ROUTE, DEMO_TOTAL_KM, pointAtKm } from '../vehicle/demoRoute';
 import { useWide } from '../app/useWide';
@@ -53,6 +53,9 @@ export default function TripSetup() {
   const [restStops, setRestStops] = useState<{ atMin: number; atKm: number; place: Place | null }[]>([]);
   const [interval, setIntervalMin] = useState(() => (pets[0] ? resolveRestPolicy([pets[0]]).intervalMinutes : settings.defaultRestIntervalMinutes));
   const recordRoute = true;
+  // 반려견이 탄 날 기본은 '편한 길'(기획서 3장). 실제 차량은 NaviHelper requestRoute 경로 옵션으로 전달
+  const [routeOption, setRouteOption] = useState<RouteOption>('comfort');
+  const [addRestWp, setAddRestWp] = useState(true);
   const [busy, setBusy] = useState(false);
   const [permSheet, setPermSheet] = useState<string | null>(null);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -120,6 +123,8 @@ export default function TripSetup() {
       kind,
       demoSpeed: settings.demoSpeed,
       voice: settings.voiceGuidance,
+      routeOption,
+      plannedWaypoints: addRestWp ? restStops.filter((r) => r.place).map((r) => ({ name: r.place!.name, latitude: r.place!.latitude, longitude: r.place!.longitude, isSample: r.place!.isSample, atMinute: Math.round(r.atMin) })) : [],
     });
     setBusy(false);
     if (res.ok) {
@@ -231,6 +236,20 @@ export default function TripSetup() {
                 </div>
               </div>
               {restBasisBox}
+              <div className="cf-row" data-testid="route-option">
+                <Route size={22} color="var(--primary)" /><b>경로 옵션</b>
+                <div className="grow cf-iv">
+                  {(['comfort', 'fast'] as RouteOption[]).map((o) => <button key={o} className={`chip ${routeOption === o ? 'on' : ''}`} onClick={() => setRouteOption(o)}>{ROUTE_OPTION_LABEL[o]}{o === 'comfort' ? ' · 반려견 추천' : ''}</button>)}
+                </div>
+                <span className="t-cap" style={{ maxWidth: 220 }}>{settings.demoMode ? '데모: 표시만 해요 · 차량 내비 연동 후 경로 옵션으로 전달' : '내장 내비 연동 후 경로 옵션으로 전달돼요'}</span>
+              </div>
+              {restStops.some((r) => r.place) && (
+                <div className="cf-row" data-testid="rest-waypoint">
+                  <Coffee size={22} color="var(--primary)" /><b>휴식지 경유</b>
+                  <span className="grow t-cap">{restStops.filter((r) => r.place).map((r) => `${r.place!.name}${r.place!.isSample ? '(샘플)' : ''} · 약 ${Math.round(r.atMin)}분 지점`).join(', ')}</span>
+                  <Switch checked={addRestWp} onChange={setAddRestWp} label="추천 휴식지를 경유지로 추가" />
+                </div>
+              )}
               <div className="cf-row">
                 <Route size={22} color="var(--primary)" /><b>경유지 추천</b>
                 <span className="grow t-cap">경로 근처 반려견 동반 장소를 지도 아래에 추천해요</span>

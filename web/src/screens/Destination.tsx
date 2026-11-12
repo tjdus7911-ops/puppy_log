@@ -9,6 +9,7 @@ import { repo } from '../data/db';
 import { CATEGORY_LABEL, PHASE_LABEL, type PlaceCategory, type TripPhoto, type VisitedPlace } from '../domain/models';
 import { formatDuration, formatKm, formatTime } from '../domain/format';
 import { regionLabel } from '../domain/regions';
+import { EMPTY_REVIEW, hasReview, REVIEW_ITEMS, reviewLine, type MungReview } from '../domain/mungchelin';
 import { useWide } from '../app/useWide';
 import { openCarPreview } from '../CarPreview';
 import { josa, petNames as joinNames } from '../domain/tripText';
@@ -31,6 +32,7 @@ export default function Destination() {
   const [places, setPlaces] = useState<VisitedPlace[]>([]);
   const [placeSheet, setPlaceSheet] = useState(false);
   const [placeForm, setPlaceForm] = useState<{ name: string; category: PlaceCategory; memo: string }>({ name: '', category: 'park', memo: '' });
+  const [review, setReview] = useState<Omit<MungReview, 'at'>>(EMPTY_REVIEW);
   const [memoSheet, setMemoSheet] = useState(false);
   const [memo, setMemo] = useState(trip?.memo ?? '');
   const [finishSheet, setFinishSheet] = useState(false);
@@ -68,14 +70,17 @@ export default function Destination() {
     toast(`사진 ${added.length}장을 이 여행에 추가했어요.`);
   };
 
-  const savePlace = async () => {
+  const savePlace = async (share = false) => {
     if (!placeForm.name.trim()) { toast('장소 이름을 입력해 주세요.', 'error'); return; }
     try {
-      await TripController.recordPlace(placeForm.name, placeForm.category, placeForm.memo);
+      const withReview = hasReview(review) ? { ...review, comment: review.comment.trim(), at: Date.now() } : undefined;
+      await TripController.recordPlace(placeForm.name, placeForm.category, placeForm.memo, withReview);
       setPlaces(await repo.placesOf(trip.id));
       setPlaceSheet(false);
       setPlaceForm({ name: '', category: 'park', memo: '' });
-      toast('방문 장소를 기록했어요.');
+      setReview(EMPTY_REVIEW);
+      toast(withReview ? '방문 장소와 멍슐랭 후기를 기록했어요.' : '방문 장소를 기록했어요.');
+      if (share) navigate(`/community/new?trip=${trip.id}`);
     } catch (e) { toast((e as Error).message, 'error'); }
   };
 
@@ -108,7 +113,7 @@ export default function Destination() {
   const heroPhoto = trip.coverPhotoUri ?? photos[photos.length - 1]?.photoUri ?? null;
   const events: TimelineItem[] = [
     ...(trip.arrivedAt ? [{ id: 'arr', at: trip.arrivedAt, icon: <Flag />, title: `${trip.destinationName ?? (trip.endLocation ? regionLabel(trip.endLocation) : '목적지')} 도착`, time: formatTime(trip.arrivedAt), sub: `가는 길 ${formatKm(trip.totalDistanceKm)} · 주행 ${formatDuration(trip.drivingDurationSeconds)}` }] : []),
-    ...places.map((pl) => ({ id: pl.id, at: pl.visitedAt, icon: <MapPinned />, title: pl.placeName, time: formatTime(pl.visitedAt), sub: [CATEGORY_LABEL[pl.category], pl.memo ? `“${pl.memo}”` : null, pl.isSample ? '샘플' : null].filter(Boolean).join(' · ') })),
+    ...places.map((pl) => ({ id: pl.id, at: pl.visitedAt, icon: <MapPinned />, title: pl.placeName, time: formatTime(pl.visitedAt), sub: [CATEGORY_LABEL[pl.category], pl.review ? `멍슐랭: ${[reviewLine(pl.review), pl.review.comment ? `“${pl.review.comment}”` : ''].filter(Boolean).join(' ')}` : null, pl.memo ? `“${pl.memo}”` : null, pl.isSample ? '샘플' : null].filter(Boolean).join(' · ') })),
     ...(photos.length ? [{ id: 'ph', at: Math.max(...photos.map((x) => x.createdAt)), icon: <Camera />, title: `사진 ${photos.length}장 추가`, time: formatTime(Math.max(...photos.map((x) => x.createdAt))) }] : []),
   ].sort((x, y) => x.at - y.at);
 
@@ -215,7 +220,23 @@ export default function Destination() {
         <label className="field"><span className="label">메모 <span className="opt">(선택)</span></span>
           <textarea className="input" maxLength={200} placeholder="예: 그늘이 많아 쉬기 좋았음" value={placeForm.memo} onChange={(e) => setPlaceForm({ ...placeForm, memo: e.target.value })} />
         </label>
-        <button className="btn primary block mt-16" onClick={savePlace}>기록하기</button>
+        <div className="mung-box" data-testid="mung-review">
+          <p className="mung-h"><span className="mung-logo">멍슐랭</span>후기 <span className="opt">(선택)</span></p>
+          <p className="t-cap">다른 보호자에게 도움이 되는 동반 정보예요. 공식 정보와 구분해 ‘보호자 후기’로 표시해요.</p>
+          {REVIEW_ITEMS.map(([k, label]) => (
+            <div key={k} className="mung-row">
+              <span>{label}</span>
+              <div className="seg-mini" role="radiogroup" aria-label={label}>
+                {([[true, '예'], [false, '아니요'], [null, '모름']] as const).map(([v, t]) => (
+                  <button key={t} role="radio" aria-checked={review[k] === v} className={review[k] === v ? 'on' : ''} onClick={() => setReview({ ...review, [k]: v })}>{t}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <input className="input mt-8" maxLength={60} placeholder="한 줄 후기 (예: 테라스석만 동반 가능해요)" value={review.comment} onChange={(e) => setReview({ ...review, comment: e.target.value })} aria-label="한 줄 후기" />
+        </div>
+        <button className="btn primary block mt-16" onClick={() => savePlace(false)}>기록하기</button>
+        {hasReview(review) && <button className="btn ghost block mt-8" onClick={() => savePlace(true)}>기록하고 여행 피드에 공유</button>}
       </Sheet>
 
       <Sheet open={memoSheet} onClose={() => setMemoSheet(false)} labelledBy="memo-title">

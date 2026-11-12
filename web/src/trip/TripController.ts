@@ -11,7 +11,7 @@ import { arrivalPush, queueEvent } from './events';
 import { hasCare, resolveRestPolicy, restDueVoice, restSoonVoice, type IntervalChangeReason, type RestPolicy, type RestRecoEntry, type RestRecoResponse } from '../domain/restCare';
 import { activityTime } from './activityTime';
 import { repo, type ActiveTripSnapshot } from '../data/db';
-import type { DriveLeg, GeoPoint, LegKind, Pet, PlaceCategory, RestSession, RestStartMethod, Trip, TripLocation, TripPhase } from '../domain/models';
+import type { DriveLeg, GeoPoint, LegKind, Pet, PlaceCategory, PlannedWaypoint, RestSession, RestStartMethod, RouteOption, Trip, TripLocation, TripPhase } from '../domain/models';
 import { newId } from '../domain/models';
 import { nearestRegion, regionLabel, regionShort } from '../domain/regions';
 import {
@@ -24,6 +24,7 @@ import { DeviceLocationDataProvider, ManualDataProvider } from '../vehicle/other
 import type { VehicleDataProvider } from '../vehicle/VehicleDataProvider';
 import { speak } from './speech';
 import { haversineKm } from '../domain/geo';
+import type { MungReview } from '../domain/mungchelin';
 import { EMPTY_MEMO, evaluateCabin, isHot, NO_CABIN, restHeatCare, shouldHoldAlerts, type CabinCapabilities, type CabinMemo, type CabinPrompt, type CabinState } from '../domain/cabin';
 import { breedLooksBrachy } from '../domain/restCare';
 import { setSpeechHold } from './speech';
@@ -41,6 +42,8 @@ export interface StartOptions {
   kind: StartKind;
   demoSpeed: number;
   voice: boolean;
+  routeOption?: RouteOption;
+  plannedWaypoints?: PlannedWaypoint[];
 }
 
 export type StartResult =
@@ -162,6 +165,7 @@ export class TripControllerImpl {
         diarySource: 'none', memo: '', coverPhotoUri: null, source: provider.source, isDemo: provider.isSimulated,
         phase: 'outbound', arrivedAt: null, returnStartedAt: null, updatedAt: startTime, syncState: 'local-only',
         restPolicy: o.restPolicy ?? resolveRestPolicy(o.pets, startTime), restRecoLog: [], restIntervalChanges: [],
+        routeOption: o.routeOption, plannedWaypoints: o.plannedWaypoints ?? [],
       };
       this.trip = trip;
       this.meta = { petNames: o.pets.map((p) => p.name), recordRoute: o.recordRoute, voice: o.voice, care: o.pets.some(hasCare), base: { distanceKm: 0, drivingSec: 0 }, brachy: o.pets.some((p) => p.care?.brachycephalic ?? breedLooksBrachy(p.breed)) };
@@ -352,13 +356,13 @@ export class TripControllerImpl {
 
   // ─────────────────────── 여행지 활동 기록 ───────────────────────
   /** 여행지에서 사용자가 직접 남기는 방문 장소(좌표는 현재/마지막 위치) */
-  async recordPlace(name: string, category: PlaceCategory, memo: string) {
+  async recordPlace(name: string, category: PlaceCategory, memo: string, review?: MungReview) {
     if (!this.trip) throw new Error('진행 중인 여행이 없어요.');
     const p = this.lastPosition ?? this.trip.endLocation ?? this.trip.destination;
     if (!p) throw new Error('위치를 알 수 없어 장소를 기록할 수 없어요.');
     await repo.addVisitedPlace({
       id: newId(), tripId: this.trip.id, placeName: name.trim(), category, latitude: p.latitude, longitude: p.longitude,
-      visitedAt: await activityTime(this.trip.id), isSample: false, source: 'user', memo: memo.trim(),
+      visitedAt: await activityTime(this.trip.id), isSample: false, source: 'user', memo: memo.trim(), ...(review ? { review } : {}),
     });
   }
 

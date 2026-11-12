@@ -1,4 +1,6 @@
 import { drivingLocked } from '../trip/driveLock';
+import { useMungReviews } from '../app/useMungReviews';
+import { aggregateReviews, REVIEW_ITEMS } from '../domain/mungchelin';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Clock, Lock, MapPin, Navigation, Phone, Search, TriangleAlert } from 'lucide-react';
 import { useStore } from '../app/store';
@@ -236,7 +238,9 @@ function PlaceCard({ place, distanceKm, onOpen, dim }: { place: Place; distanceK
 
 function PlaceDetailSheet({ place, origin, onClose, onToast }: { place: Place | null; origin: GeoPoint | null; onClose: () => void; onToast: (t: string, tone?: 'info' | 'error') => void }) {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
+  const reviews = useMungReviews([place?.id]);
   if (!place) return null;
+  const agg = aggregateReviews(reviews, place.name);
   const p = place.policy;
   const rows: [string, string][] = [
     ['소형견 동반', triLabel(p.smallDog)],
@@ -264,6 +268,16 @@ function PlaceDetailSheet({ place, origin, onClose, onToast }: { place: Place | 
             <span style={{ fontWeight: 650, color: v === '확인 필요' ? 'var(--text-3)' : v === '불가' ? '#D93F3C' : 'var(--text)' }}>{v}</span>
           </div>
         ))}
+      </div>
+      <div className="mung-box mt-12" data-testid="mung-agg">
+        <p className="mung-h"><span className="mung-logo">멍슐랭</span>보호자 후기 {agg ? `${agg.count}건` : ''}</p>
+        {agg ? (
+          <>
+            <div className="mung-tags">{REVIEW_ITEMS.map(([k, label]) => { const a = agg.items[k]; return a.yes + a.no > 0 ? <span key={k} className={a.yes >= a.no ? 'ok' : 'no'}>{label} {a.yes}·{a.no}</span> : null; })}</div>
+            {agg.comments.map((c) => <p key={c} className="t-cap">“{c}”</p>)}
+            <p className="t-cap">이 기기에 남긴 후기만 보여요 · 공식 정보와 다를 수 있어요</p>
+          </>
+        ) : <p className="t-cap">아직 후기가 없어요. 다녀온 뒤 여행지 기록에서 남길 수 있어요.</p>}
       </div>
       <div className="mt-16" style={{ display: 'grid', gap: 8, fontSize: 14 }}>
         <p className="row" style={{ gap: 8 }}><Clock size={16} color="var(--text-2)" />{place.hours ?? '영업시간 정보 없음'}</p>

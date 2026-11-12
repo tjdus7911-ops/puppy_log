@@ -89,8 +89,10 @@ try {
     const plan = (await page.locator('[data-testid=rest-plan]').innerText()).replace(/\s+/g, ' ');
     const basis = await page.locator('.rest-basis .b').innerText();
     await page.locator('.cf-row .chip', { hasText: '300배속' }).click();
+    await page.locator('[data-testid=route-option] .chip.on', { hasText: '편한 길' }).waitFor();
+    const wp = (await page.locator('[data-testid=rest-waypoint]').innerText()).replace(/\s+/g, ' ');
     await shot('02b-car-confirm');
-    return `${plan} · ${basis}`;
+    return `${plan} · ${basis} · 편한 길 · ${wp.slice(0, 40)}`;
   });
 
   await step('차량: 여행 시작(데모 300배속) · 휴대폰은 기록 상태만', async () => {
@@ -188,12 +190,18 @@ try {
     await page.locator('.qa .tile', { hasText: '3장' }).waitFor({ timeout: 10000 });
   });
 
-  await step('방문 장소 기록', async () => {
+  await step('방문 장소 기록 + 멍슐랭 후기', async () => {
     await page.locator('.tile', { hasText: '장소 기록' }).click();
     await page.getByPlaceholder('예: 경포 솔숲 산책로').fill('경포 솔숲 산책로');
     await page.getByPlaceholder('예: 그늘이 많아 쉬기 좋았음').fill('그늘이 많아 쉬기 좋았음');
-    await btn('기록하기').click();
+    const mung = page.locator('[data-testid=mung-review]');
+    await mung.getByRole('radiogroup', { name: '소형견 가능' }).getByRole('radio', { name: '예' }).click();
+    await mung.getByRole('radiogroup', { name: '주차 편리' }).getByRole('radio', { name: '예' }).click();
+    await mung.getByLabel('한 줄 후기').fill('그늘 벤치에서 쉬기 좋아요');
+    await btn('기록하기', true).click();
     await page.locator('.tile', { hasText: '1곳' }).waitFor();
+    await page.getByText(/멍슐랭: 소형견 가능 · 주차 편리/).first().waitFor();
+    return '멍슐랭 후기(소형견 가능 · 주차 편리 · 한 줄 후기) 함께 기록';
   });
 
   await step('여행 메모 작성', async () => {

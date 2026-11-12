@@ -2,6 +2,7 @@
 // Android 앱의 Room Entity(android/.../data/local/entity)와 필드 이름을 맞춰 두었습니다.
 
 import type { CabinCapabilities, CabinPromptKind } from './cabin';
+import type { MungReview } from './mungchelin';
 import type { IntervalChange, PetCare, RestPolicy, RestRecoEntry } from './restCare';
 
 export type PetSize = 'small' | 'medium' | 'large';
@@ -111,6 +112,10 @@ export interface Trip {
   /** 여행 시작 때 확인한 차량 탑승 공간 도메인 지원 여부 */
   vehicleCaps?: CabinCapabilities;
   safetyLog?: SafetyLogEntry[];
+  /** 출발 전 고른 경로 옵션(내비 requestRoute 로 전달 예정) */
+  routeOption?: RouteOption;
+  /** 출발 전 경유지로 넣은 추천 휴식지 */
+  plannedWaypoints?: PlannedWaypoint[];
   placeSuggestLog?: PlaceSuggestEntry[];
 }
 
@@ -144,6 +149,9 @@ export interface RestSession {
 }
 
 export type RestStartMethod = 'button' | 'voice' | 'door';
+export type RouteOption = 'comfort' | 'fast';
+export const ROUTE_OPTION_LABEL: Record<RouteOption, string> = { comfort: '편한 길', fast: '빠른 길' };
+export interface PlannedWaypoint { name: string; latitude: number; longitude: number; isSample: boolean; atMinute: number }
 export const REST_START_LABEL: Record<RestStartMethod, string> = { button: '버튼', voice: '음성', door: '뒷문 열림 확인' };
 
 /** 탑승 안전 안내·뒷문 휴식 확인 기록 */
@@ -165,6 +173,8 @@ export interface VisitedPlace {
   /** 'search' = 검색 결과에서 '들렀어요', 'user' = 여행지에서 직접 기록 */
   source?: 'search' | 'user';
   memo?: string;
+  /** 멍슐랭 후기(보호자가 남긴 반려견 동반 후기, 선택) */
+  review?: MungReview;
 }
 
 export interface TripPhoto {

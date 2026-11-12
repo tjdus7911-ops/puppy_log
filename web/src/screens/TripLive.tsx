@@ -13,13 +13,15 @@ import { regionLabel } from '../domain/regions';
 import { callName, josa, petNames as joinNames } from '../domain/tripText';
 import { haversineKm } from '../domain/geo';
 import { aheadOnRoute } from '../domain/autoReco';
-import { mapJsKey, newId, type GeoPoint, type PlaceCategory } from '../domain/models';
+import { mapJsKey, newId, type GeoPoint, type PlaceCategory, ROUTE_OPTION_LABEL } from '../domain/models';
 import { repo } from '../data/db';
 import { DEMO_RETURN_ROUTE, DEMO_ROUTE, DEMO_ROUTES } from '../vehicle/demoRoute';
 import { getPlaceProvider, sortByDistance } from '../places/providers';
 import type { Place } from '../places/PlaceSearchProvider';
 import { openNavigation } from '../places/navigation';
 import { useOnline } from '../app/useOnline';
+import { useMungReviews } from '../app/useMungReviews';
+import { aggregateReviews, supplement } from '../domain/mungchelin';
 import { getTrafficProvider, hazardsAhead, hazardVoice, HAZARD_LABEL, type Hazard, type HazardType } from '../traffic/TrafficInfoProvider';
 import { routeSnapshot } from '../nav/NavigationProvider';
 import { listenOnce, parseIntent, speechRecognitionSupported, type VoiceIntent } from '../trip/voice';
@@ -111,6 +113,7 @@ export default function TripLive() {
   const placeVoiceDone = useRef<string>('');
   const [hazards, setHazards] = useState<{ list: Hazard[]; error: string | null }>({ list: [], error: null });
   const online = useOnline();
+  const mungReviews = useMungReviews([]);
   const [recs, setRecs] = useState<RouteRec[]>([]);
   // 휴식 시점 음성 다음에, 경로 근처 휴식 장소가 있으면 한 번만 안내(동반 확인된 곳만 '동반 가능'이라고 말함)
   useEffect(() => {
@@ -284,6 +287,7 @@ export default function TripLive() {
     ...hazards.list.map((h) => ({ id: h.id, point: h, kind: 'hazard' as const, color: HAZARD_COLOR[h.type], label: HAZARD_LABEL[h.type] })),
     ...(!live.arrived ? visibleRecs.slice(0, 3).map(({ place }) => ({ id: place.id, point: place, kind: 'rec' as const, label: place.name })) : []),
     ...recs.filter((r) => waypoints.includes(r.place.id)).map(({ place }) => ({ id: `wp-${place.id}`, point: place, kind: 'place' as const, label: `경유지 · ${place.name}` })),
+    ...(!isReturn && !isExtra && !live.arrived ? (live.trip.plannedWaypoints ?? []).map((w) => ({ id: `pw-${w.name}`, point: w, kind: 'place' as const, label: `경유지 · ${w.name}` })) : []),
     ...(live.position ? [{ id: 'cur', point: live.position, kind: 'current' as const }] : []),
   ];
 
@@ -479,7 +483,7 @@ export default function TripLive() {
     : `${withPets(live.petNames)} ${destTitle} ${isReturn ? '돌아가는 중' : '이동 중'}`;
   const headSub = dash === 'arrived'
     ? (isDemo ? '데모 시뮬레이션 도착 · 실제 차량에서는 내비 도착 신호로 전환돼요' : 'GPS 위치 기준 도착 · 휴식 알림과 휴식지 추천을 멈췄어요')
-    : isReturn ? `${fromLabel} → ${toLabel}` : live.trip.destinationName ?? '목적지 미설정 · 가는 길 기록 중';
+    : isReturn ? `${fromLabel} → ${toLabel}` : `${live.trip.routeOption ? `${ROUTE_OPTION_LABEL[live.trip.routeOption]} · ` : ''}${live.trip.destinationName ?? '목적지 미설정 · 가는 길 기록 중'}`;
 
   if (wide) {
     const pet = tripPets[0];
@@ -567,7 +571,7 @@ export default function TripLive() {
                   <div className="grow" style={{ minWidth: 0 }}>
                     <p className="t num">{dash === 'resting' ? `휴식 중 · ${Math.max(0, Math.floor(restElapsed / 60))}분` : dash === 'due' ? restDueTitle(mainPetName) : `다음 휴식까지 ${restMin}분`}
                       {(dash === 'driving' || dash === 'soon') && restAheadKm != null && <small> (약 {formatKm(restAheadKm)})</small>}</p>
-                    <p className="s">{dash === 'resting' ? (live.heatCare ?? '충분히 쉬고 출발해요') : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
+                    <p className="s">{dash === 'resting' ? (live.heatCare ?? '충분히 쉬고 출발해요') : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준${!isReturn && live.trip.plannedWaypoints?.length ? ` · 경유지 ${live.trip.plannedWaypoints[0].name}` : ''}` : `${e.restIntervalMin}분 간격 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
                   </div>
                   {dash === 'due' && <><button className="btn sm primary" onClick={findRestPlace}>가까운 휴식 장소 찾기</button><button className="btn sm ghost" onClick={remindLater}>나중에 알림</button>{!driving && <button className="btn sm ghost" onClick={() => { TripController.logRestResponse('rest'); void TripController.beginRest(); }}>휴식 시작</button>}</>}
                   {dash === 'resting' && <><button className="btn sm ghost" onClick={async () => { const added = await addPhotosToTrip(live.trip!.id, (m: string) => toast(m, 'error')); if (added?.length) toast(`사진 ${added.length}장을 추가했어요.`); }}><Camera size={15} />사진</button><button className="btn sm ghost" onClick={() => setPetModeSheet(true)}><PawPrint size={15} />펫 모드 안내</button><button className="btn sm ghost" onClick={() => setIntervalSheet(true)}><BellRing size={15} />알림 간격</button><button className="btn sm primary" onClick={async () => { const d = await TripController.finishRest(); toast(`휴식을 마쳤어요 · ${formatDuration(d)}`); }}>휴식 종료</button></>}
@@ -675,7 +679,7 @@ export default function TripLive() {
                 <span className={`pet-ok ${pl.c}`}>{pl.t}</span>
               </div>
               <div className="pdx-facts">
-                <span>주차 <b>{r.place.policy.parking === true ? '가능' : r.place.policy.parking === false ? '불가' : '확인 필요'}</b></span>
+                {(() => { const sp = supplement(r.place.policy.parking, aggregateReviews(mungReviews, r.place.name), 'parking'); return <span>주차 <b className={sp.from === 'review' ? 'by-review' : ''}>{sp.label}</b></span>; })()}
                 <span>운영 시간 <b>{r.place.hours ?? '확인 필요'}</b></span>
                 <span>야외 동반 <b>{r.place.policy.outdoor === true ? '가능' : r.place.policy.outdoor === false ? '불가' : '확인 필요'}</b></span>
               </div>
