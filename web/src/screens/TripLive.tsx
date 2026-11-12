@@ -612,9 +612,9 @@ export default function TripLive() {
       <section className="pt-hero">
         <PetStack pets={tripPets} names={live.petNames} size={52} />
         <div className="grow" style={{ minWidth: 0 }}>
-          <span className="pt-live"><i />{dash === 'arrived' ? '도착 확인 대기' : resting ? '휴식 중' : '차량에서 기록 중'}{isDemo && <em>데모</em>}</span>
+          <span className="pt-live"><i />{dash === 'arrived' ? '도착' : resting ? '휴식 중' : '차량에서 기록 중'}{isDemo && <em>데모</em>}</span>
           <h1 className="h-md">{dash === 'arrived' ? headTitle : headline}</h1>
-          <p className="t-cap">{dash === 'arrived' ? '차량 화면에서 도착을 확인하면 여기서 여행지 기록을 시작할 수 있어요' : routeLine}</p>
+          <p className="t-cap">{dash === 'arrived' ? (isReturn ? '집에 도착했다면 여행을 완료해 기록을 저장해요' : '주차했다면 여행지 기록을 시작해 사진·메모를 남겨요') : routeLine}</p>
         </div>
       </section>
       {progress != null && dash !== 'arrived' && (
@@ -633,8 +633,14 @@ export default function TripLive() {
         <p><Car size={18} /><span>휴식 알림 · 동반 장소 제안 · 안전 안내는 <b>차량 화면과 음성</b>으로 알려 드려요.</span></p>
         <p><Camera size={18} /><span>도착하면 이 휴대폰에서 사진 · 메모 · 방문 장소를 남기고, 여행 기록과 커뮤니티를 이용할 수 있어요.</span></p>
       </div>
-      {isDemo && <button className="btn primary block xl" onClick={openCarPreview}><Car size={20} />차량 화면 보기 (데모)</button>}
+      {dash === 'arrived' && (
+        <button className="btn primary block xl" disabled={ending} onClick={isReturn ? finish : arrive} data-testid="phone-arrive">
+          {isReturn ? <><Flag size={20} />여행 완료</> : <><Camera size={20} />여행지 기록 시작</>}
+        </button>
+      )}
+      {isDemo && <button className={`btn ${dash === 'arrived' ? 'ghost' : 'primary'} block ${dash === 'arrived' ? '' : 'xl'}`} onClick={openCarPreview}><Car size={20} />차량 화면 보기 (데모)</button>}
       <div className="btn-row">
+        <button className="btn ghost" onClick={() => navigate('/home')}>홈</button>
         <button className="btn ghost" onClick={() => navigate('/album')}>여행 기록</button>
         <button className="btn ghost" onClick={() => navigate('/community')}>커뮤니티</button>
       </div>

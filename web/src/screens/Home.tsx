@@ -27,7 +27,6 @@ import { PetPhoto } from './home/PetHero';
 import CarHome from './home/CarHome';
 import { BackgroundSheet, TripBackground } from './home/TripBackground';
 import { SafetyCheck } from './SafetyCheck';
-import TripLive from './TripLive';
 import Destination from './Destination';
 
 const COMPLETED_HOME_DAYS = 7;
@@ -44,8 +43,8 @@ export default function Home() {
   const wide = useWide();
   // 차량 화면: 홈은 항상 차량 메인 홈(진행 중인 여행은 카드로), 주행은 '/trip/live', 여행지 활동은 '/trip/destination'
   if (wide) return <CarHome />;
+  // 휴대폰: 여행지 활동 중이면 여행지 기록 화면, 그 외(주행 중 포함)는 일반 홈 + 진행 중 여행 카드
   if (live.active && live.phase === 'at-destination') return <Destination />;
-  if (live.active) return <TripLive />;
   return <IdleWrap />;
 }
 
@@ -121,8 +120,20 @@ function IdleHome() {
         </div>
       </section>
 
+      {/* 진행 중인 여행(차량에서 기록 중): 상태 카드 → 자세히 보기 */}
+      {live.active && live.driving && live.trip && (
+        <button className="mh-live" onClick={() => navigate('/trip/live')} data-testid="home-live-trip">
+          <span className="dot" />
+          <span className="grow">
+            <b>{live.arrived ? (live.legKind === 'return' ? '집 근처에 도착했어요' : '목적지 근처에 도착했어요') : live.legKind === 'return' ? '집으로 돌아가는 중' : `${live.trip.destinationName ?? '목적지'} 가는 중`}</b>
+            <small>{live.arrived ? '눌러서 여행지 기록을 시작해요' : `차량에서 기록 중 · 주행 ${formatDuration(live.engine?.drivingSec ?? 0)} · ${formatKm(live.trip.totalDistanceKm)}`}{live.trip.isDemo ? ' · 데모' : ''}</small>
+          </span>
+          <ChevronRight size={20} />
+        </button>
+      )}
+
       {/* 다음 여행: 여행은 차량에서 시작(휴대폰은 준비물 체크·데모 진입만) */}
-      {main && (
+      {main && !live.active && (
         <section className="mh-next">
           <span className="ic"><Car size={22} /></span>
           <div className="grow">
@@ -132,7 +143,7 @@ function IdleHome() {
           <button className="mh-check" onClick={() => setSafetyOpen(true)} aria-label="출발 전 준비물 체크"><ShieldCheck size={16} />{safetyDone}/{SAFETY_ITEMS.length}</button>
         </section>
       )}
-      {main && settings.demoMode && (
+      {main && settings.demoMode && !live.active && (
         <button className="navi-suggest" onClick={() => navigate('/trip/setup?dest=강릉&from=navi')}>
           <Navigation size={18} /><span className="grow">강릉 경포해변 여행 체험하기</span><span className="badge sample">데모</span>
         </button>

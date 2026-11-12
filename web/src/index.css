@@ -1761,3 +1761,12 @@ button.place-row { cursor: pointer; }
 .cs-confirm .cf-rows { min-height: 0; overflow-y: auto; padding-right: 4px; gap: 8px; }
 .cs-confirm .cf-row { padding: 10px 16px; }
 .cs-confirm .rest-basis { padding: 10px 16px; }
+/* 휴대폰 홈: 진행 중 여행 카드 */
+.mh-live { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 0; border-radius: 20px; cursor: pointer; text-align: left; margin-top: -8px;
+  background: linear-gradient(120deg, #2f5fd0, #4b7ef0); color: #fff; box-shadow: 0 12px 26px -14px rgba(47,95,208,.8); }
+.mh-live .dot { width: 10px; height: 10px; border-radius: 50%; background: #5ff0a0; box-shadow: 0 0 0 5px rgba(95,240,160,.25); flex: none; animation: mhPulse 1.6s ease-in-out infinite; }
+.mh-live span.grow { display: grid; gap: 2px; min-width: 0; }
+.mh-live b { font-size: 15.5px; font-weight: 700; letter-spacing: -0.02em; }
+.mh-live small { font-size: 12.5px; color: rgba(255,255,255,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@keyframes mhPulse { 50% { box-shadow: 0 0 0 9px rgba(95,240,160,0); } }
+.phone-trip .btn-row .btn { flex: 1; }

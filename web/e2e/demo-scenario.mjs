@@ -103,10 +103,18 @@ try {
     await phoneV();
     await page.locator('[data-testid=phone-trip-status]').waitFor();
     if (await page.locator('.m-actions, .rest-line, .cd-actions').count()) throw new Error('휴대폰에 주행 조작이 보임');
+    await page.locator('.bottom-nav').waitFor();
     await shot('03b-phone-status');
+    await page.goto(`${BASE}#/home`);
+    await page.locator('[data-testid=home-live-trip]').waitFor();
+    await page.locator('.bottom-nav').waitFor();
+    await shot('03c-phone-home-live');
+    await page.locator('[data-testid=home-live-trip]').click();
+    await page.locator('[data-testid=phone-trip-status]').waitFor();
     await wideV();
+    await page.goto(`${BASE}#/trip/live`);
     await page.locator('.cd.v5').waitFor();
-    return '휴대폰: “차량에서 기록 중” 상태 카드';
+    return '휴대폰: 홈(진행 중 카드·하단 메뉴) ↔ “차량에서 기록 중” 상태 화면';
   });
 
   await step('휴식 10분 전: 팝업 없이 휴식 카드', async () => {
