@@ -3,6 +3,7 @@ import { BookOpen, Clock3, House, Navigation, PawPrint, Send, Settings, UserRoun
 import { AppProvider, useStore } from './app/store';
 import { match, navigate, useRoute } from './app/router';
 import { useWide } from './app/useWide';
+import { setSpeechMuted } from './trip/speech';
 import { TripController } from './trip/TripController';
 import { storageMode } from './data/db';
 import { formatClock } from './domain/format';
@@ -75,6 +76,7 @@ function Shell() {
   const { ready, fatal, settings, pets, toasts, toast, reload } = useStore();
   const route = useRoute();
   const wide = useWide();
+  useEffect(() => { setSpeechMuted(!wide); }, [wide]);
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const [restoreChecked, setRestoreChecked] = useState(false);
 

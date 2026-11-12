@@ -1,7 +1,7 @@
 // 여행지 활동 홈 (phase 'at-destination'): 목적지 도착 후에도 여행은 계속됩니다.
 // 사진 추가 · 방문 장소 기록 · 여행 메모 · 주변 장소 탐색 · 이동 기록 확인 · 복귀 이동 시작 · 여행 마무리
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Camera, Compass, Flag, ImagePlus, MapPinned, NotebookPen, Pencil, Plus } from 'lucide-react';
+import { Car, Camera, Compass, Flag, ImagePlus, MapPinned, NotebookPen, Pencil, Plus } from 'lucide-react';
 import { useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { addPhotosToTrip } from '../app/photos';
@@ -9,6 +9,8 @@ import { repo } from '../data/db';
 import { CATEGORY_LABEL, PHASE_LABEL, type PlaceCategory, type TripPhoto, type VisitedPlace } from '../domain/models';
 import { formatDuration, formatKm, formatTime } from '../domain/format';
 import { regionLabel } from '../domain/regions';
+import { useWide } from '../app/useWide';
+import { openCarPreview } from '../CarPreview';
 import { josa, petNames as joinNames } from '../domain/tripText';
 import { TripController } from '../trip/TripController';
 import { completeTripWithDraft } from '../trip/completeTrip';
@@ -24,6 +26,7 @@ export default function Destination() {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
   const { settings, toast, reload } = useStore();
   const trip = live.trip;
+  const wide = useWide();
   const [photos, setPhotos] = useState<TripPhoto[]>([]);
   const [places, setPlaces] = useState<VisitedPlace[]>([]);
   const [placeSheet, setPlaceSheet] = useState(false);
@@ -171,14 +174,27 @@ export default function Destination() {
 
         <section className="next-move">
           <p style={{ fontWeight: 600, fontSize: 16 }}>{homeAsk}</p>
-          <button className="btn primary block xl" disabled={busy} onClick={startReturn}>집으로 출발 · 돌아가는 길 기록</button>
-          <p className="t-cap" style={{ fontSize: 12 }}>
-            {trip.isDemo ? '데모: 서울(가상 집)까지 주행해요.' : settings.homeLocation ? `저장한 집 위치(${settings.homeLocation.name}) 근처에 오면 도착을 알려 드려요.` : <>집 위치를 저장하면 집 근처 도착을 알려 드려요. <button className="link" onClick={() => navigate('/my')}>집 위치 저장</button></>}
-          </p>
-          <div className="btn-row">
-            <button className="btn ghost" disabled={busy} onClick={startExtra}>다른 장소로 이동</button>
-            <button className="btn ghost" disabled={busy} onClick={() => setFinishSheet(true)}>여행 마무리</button>
-          </div>
+          {wide ? (
+            <>
+              <button className="btn primary block xl" disabled={busy} onClick={startReturn}>집으로 출발 · 돌아가는 길 기록</button>
+              <p className="t-cap" style={{ fontSize: 12 }}>
+                {trip.isDemo ? '데모: 서울(가상 집)까지 주행해요.' : settings.homeLocation ? `저장한 집 위치(${settings.homeLocation.name}) 근처에 오면 도착을 알려 드려요.` : <>집 위치를 저장하면 집 근처 도착을 알려 드려요. <button className="link" onClick={() => navigate('/my')}>집 위치 저장</button></>}
+              </p>
+              <div className="btn-row">
+                <button className="btn ghost" disabled={busy} onClick={startExtra}>다른 장소로 이동</button>
+                <button className="btn ghost" disabled={busy} onClick={() => setFinishSheet(true)}>여행 마무리</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="car-only-dest" data-testid="return-in-car">
+                <Car size={18} color="var(--primary)" />
+                <span className="grow"><b>차에 타면 차량 앱이 이어서 기록해요</b><small>“{homeAsk}”라고 물어보고, 집까지 오는 길을 같은 여행으로 기록해요</small></span>
+              </div>
+              {trip.isDemo && <button className="btn primary block xl" onClick={openCarPreview}><Car size={20} />차량 화면에서 이어 가기 (데모)</button>}
+              <button className="btn ghost block" disabled={busy} onClick={() => setFinishSheet(true)}>돌아가는 길 없이 여행 마무리</button>
+            </>
+          )}
           <p className="t-cap" style={{ fontSize: 12 }}>
             {trip.isDemo ? '데모: 돌아가는 길은 강릉 → 서울, 다른 장소 이동은 강릉 시내 짧은 가상 주행이에요. ' : ''}돌아가는 길 없이 마무리해도 기록은 그대로 남아요. 앱을 닫아도 여행지 활동 상태는 유지돼요.
           </p>

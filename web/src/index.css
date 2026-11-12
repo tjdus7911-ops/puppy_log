@@ -1643,3 +1643,28 @@ button.place-row { cursor: pointer; }
 .arr-note.leave { color: var(--primary); font-weight: 600; }
 .pm-steps { padding-left: 20px; display: grid; gap: 8px; font-size: 15px; line-height: 1.5; }
 .pm-notes { padding-left: 18px; display: grid; gap: 4px; }
+/* 휴대폰: 여행은 차량에서 시작 */
+.car-only { display: grid; gap: 14px; margin-top: 12px; }
+.car-only > .ic { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); }
+.car-only-dest { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--primary-soft); }
+.car-only-dest span { display: grid; gap: 2px; min-width: 0; }
+.car-only-dest small { font-size: 12.5px; color: var(--text-2); }
+.car-only-list { margin: 0; padding: 14px 16px 14px 32px; border-radius: 14px; background: #fff; box-shadow: inset 0 0 0 1px var(--line, #e6ebf3); display: grid; gap: 6px; font-size: 14px; color: var(--text-2); }
+.car-only-list b { color: var(--text); margin-right: 4px; }
+.car-only .btn svg, .phone-trip .btn svg { margin-right: 6px; }
+/* 휴대폰: 차량에서 기록 중 상태 */
+.phone-trip { display: grid; gap: 14px; align-content: start; padding-top: 18px; }
+.pt-hero { display: flex; gap: 14px; align-items: center; padding: 18px; border-radius: 22px; background: linear-gradient(135deg, #eef4ff, #e3edff); }
+.pt-hero h1 { margin-top: 4px; }
+.pt-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--primary); }
+.pt-live i { width: 8px; height: 8px; border-radius: 50%; background: #2fbf71; box-shadow: 0 0 0 4px rgba(47,191,113,.18); }
+.pt-live em { font-style: normal; font-size: 11px; color: var(--accent-text); background: var(--accent-soft); padding: 1px 6px; border-radius: 6px; }
+.pt-stats { list-style: none; margin: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.pt-stats li { display: grid; gap: 2px; }
+.pt-stats span { font-size: 12.5px; color: var(--text-2); }
+.pt-stats b { font-size: 22px; }
+.pt-info { display: grid; gap: 10px; }
+.pt-info p { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.pt-info svg { flex: none; color: var(--primary); margin-top: 2px; }
+.cf-plan { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 14px; color: var(--text-2); }
+.cf-plan svg { color: var(--primary); }

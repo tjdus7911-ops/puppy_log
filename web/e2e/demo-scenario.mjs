@@ -1,4 +1,4 @@
-// 멍로드 전체 여행 흐름 E2E (30단계: 여행 22 + 커뮤니티 7 + 차량 화면 1, playwright-core + 로컬 Chrome, 데모 모드).
+// 멍로드 전체 여행 흐름 E2E (31단계: 여행 23(차량 화면 주행 + 휴대폰 여행지 기록) + 커뮤니티 7 + 차량 홈 1, playwright-core + 로컬 Chrome, 데모 모드).
 // 사용: npm run build && npx vite preview --port 4173 &  →  node e2e/demo-scenario.mjs [chrome 경로]
 // 데모 주행은 시뮬레이션이며 실제 차량·내비·도로 데이터가 아닙니다.
 import { chromium } from 'playwright-core';
@@ -67,100 +67,110 @@ try {
     await full('01-home-before');
   });
 
-  await step('목적지 강릉 설정 (데모: 차량 내비 목적지 제안)', async () => {
+  const wideV = () => page.setViewportSize({ width: 1600, height: 900 });
+  const phoneV = () => page.setViewportSize({ width: 390, height: 844 });
+  const demoEv = async (label) => { await page.locator('.demo-tag').first().click(); await page.locator('.st-opt', { hasText: label }).click(); };
+
+  await step('휴대폰: 여행 시작은 차량에서(목적지 강릉 제안)', async () => {
     await page.locator('.navi-suggest').click();
-    await page.getByText('함께 이동할 반려견').waitFor();
-    const v = await page.getByLabel('목적지', { exact: true }).inputValue();
-    if (!v.includes('강릉')) throw new Error(`목적지 값: ${v}`);
-    return `목적지 입력값 "${v}"`;
+    await page.locator('[data-testid=car-only-setup]').waitFor();
+    const t = (await page.locator('.car-only-dest').innerText()).split('\n')[0];
+    if (!t.includes('강릉')) throw new Error(`목적지 ${t}`);
+    if (await page.getByRole('button', { name: /출발하기/ }).count()) throw new Error('휴대폰에 출발 버튼이 있음');
+    await full('02-phone-car-only');
+    return `목적지 “${t}” · 휴대폰에는 출발 버튼 없음`;
   });
 
-  await step('출발 전 반려견 맞춤 휴식 계획 확인', async () => {
-    await page.getByRole('heading', { name: /맞춤 휴식 계획/ }).waitFor();
-    await page.getByText('예상 휴식').waitFor();
-    const txt = (await page.locator('.screen').first().innerText()).replace(/\s+/g, ' ');
-    await btn('300배속').click();
-    await full('02-trip-setup-plan');
-    const drive = txt.match(/(\d+:\d\d) 예상 주행 시간/)?.[1];
-    const rests = txt.match(/예상 휴식 (\S+) ?회/)?.[1];
-    if (!drive || !rests) throw new Error(`계획 미표시: ${txt.slice(0, 120)}`);
-    return `예상 주행 ${drive} · 예상 휴식 ${rests}회 (추정)`;
+  await step('차량: 출발 전 맞춤 휴식 계획 확인', async () => {
+    await wideV();
+    await page.locator('.cs-item.on').first().waitFor();
+    await page.locator('.cs-next').click();
+    await page.locator('[data-testid=rest-plan]').waitFor();
+    const plan = (await page.locator('[data-testid=rest-plan]').innerText()).replace(/\s+/g, ' ');
+    const basis = await page.locator('.rest-basis .b').innerText();
+    await page.locator('.cf-row .chip', { hasText: '300배속' }).click();
+    await shot('02b-car-confirm');
+    return `${plan} · ${basis}`;
   });
 
-  await step('여행 시작 (데모 300배속)', async () => {
-    await page.getByRole('button', { name: /출발하기/ }).click();
-    await page.locator('.tiles3').waitFor();
-    await page.waitForTimeout(2000);
+  await step('차량: 여행 시작(데모 300배속) · 휴대폰은 기록 상태만', async () => {
+    await page.locator('.cs-next', { hasText: '여행 시작하기' }).click();
+    await page.locator('.cd.v5').waitFor();
+    await page.waitForTimeout(1500);
     await shot('03-live-driving');
+    await phoneV();
+    await page.locator('[data-testid=phone-trip-status]').waitFor();
+    if (await page.locator('.m-actions, .rest-line, .cd-actions').count()) throw new Error('휴대폰에 주행 조작이 보임');
+    await shot('03b-phone-status');
+    await wideV();
+    await page.locator('.cd.v5').waitFor();
+    return '휴대폰: “차량에서 기록 중” 상태 카드';
   });
 
-  await step('휴식 10분 전: 팝업 없이 휴식 카드·추천 강조', async () => {
+  await step('휴식 10분 전: 팝업 없이 휴식 카드', async () => {
     await page.locator('.rest-line.soon').waitFor({ timeout: 60000 });
     await shot('04-reminder-soon');
     if (await page.locator('.overlay').count()) throw new Error('팝업이 떠 있음');
-    return (await page.locator('.rest-line .t').innerText()) + ` · 강조 카드 ${await page.locator('.rr-card.hl').count()}개`;
+    return await page.locator('.rest-line .t').innerText();
   });
 
-  await step('휴식 시점(90분) → 휴식 시작/종료(상태별 버튼)', async () => {
+  await step('휴식 시점 → 나중에 알림 → 휴게소 주차·뒷문 열림 → 휴식 시작 → 함께 내려요 → 종료', async () => {
     await page.locator('.rest-line.due').waitFor({ timeout: 60000 });
     await shot('05-reminder-due');
     const t = await page.locator('.rest-line .t').innerText();
     if (await page.locator('.overlay').count()) throw new Error('팝업이 떠 있음');
-    await page.locator('.ca', { hasText: '휴식 시작' }).click();
+    await btn('나중에 알림').click();
+    await demoEv('휴게소 주차');
+    await page.locator('[data-testid=cabin-prompt]', { hasText: '휴식 시작할까요?' }).waitFor({ timeout: 8000 });
+    await page.locator('[data-testid=cabin-prompt]').getByRole('button', { name: '휴식 시작' }).click();
+    await page.locator('[data-testid=pet-stay]').getByRole('button', { name: '함께 내려요' }).click();
     await page.locator('.rest-line.resting').waitFor();
-    await page.waitForTimeout(1500);
-    await page.locator('.ca', { hasText: '휴식 종료' }).click();
+    await btn('휴식 종료').click();
     await page.waitForTimeout(400);
-    return `“${t}” → 휴식 중 → 종료`;
+    return `“${t}” → 뒷문 열림 확인으로 휴식 → 종료`;
   });
 
   await step('다음 휴식지 추천 카드(팝업 없음) · 경유지 추가', async () => {
     await page.locator('.rr-card').first().waitFor({ timeout: 30000 });
     if (await page.locator('.reco-pop').count()) throw new Error('추천 팝업이 떠 있음');
-    const n = await page.locator('.rr-list .rr-card').count();
+    const cnt = await page.locator('.rr-list .rr-card').count();
     const first = (await page.locator('.rr-card').first().innerText()).replace(/\s+/g, ' ').slice(0, 60);
     await page.locator('.rr-card .rr-go').first().click();
     await page.locator('.rr-card.on').waitFor();
     await shot('06-auto-reco');
-    return `카드 ${n}개 · ${first} · 경유지 표시`;
+    return `카드 ${cnt}개 · ${first} · 경유지 표시`;
   });
 
   await step('도로 위험 정보(데모 표시)', async () => {
-    await page.setViewportSize({ width: 1600, height: 900 });
     await page.locator('.hz-pill .badge.sample').waitFor({ timeout: 10000 });
-    await page.waitForTimeout(500);
     await shot('07-dashboard-wide-hazard');
-    await page.setViewportSize({ width: 390, height: 844 });
     return '‘데모’ 배지와 함께 표시';
   });
 
-  await step('차량 상태(데모): 창문 안내 · 더운 날 에어컨 · 뒷문 열림 휴식 확인', async () => {
-    await page.setViewportSize({ width: 1600, height: 900 }); // 차량 화면에서만 동작
-    await page.waitForTimeout(500);
-    const ev = async (label) => { await page.locator('.demo-tag').first().click(); await page.locator('.st-opt', { hasText: label }).click(); };
-    await ev('뒷좌석 창문 열림');
+  await step('차량 상태(데모): 창문 안내 · 더운 날 에어컨 켜기 · 휴대폰에는 표시 없음', async () => {
+    await demoEv('뒷좌석 창문 열림');
     await page.locator('[data-testid=cabin-prompt]', { hasText: '뒷좌석 창문이 많이 열려 있어요' }).waitFor({ timeout: 8000 });
     await page.locator('[data-testid=cabin-prompt]').getByRole('button', { name: '확인' }).click();
-    await ev('더운 날');
+    await demoEv('더운 날');
     await page.locator('[data-testid=cabin-prompt]', { hasText: '에어컨을 켤까요?' }).waitFor({ timeout: 8000 });
     await shot('07b-cabin-heat');
     await page.locator('[data-testid=cabin-prompt]').getByRole('button', { name: '에어컨 켜기' }).click();
     await page.locator('.cabin-row', { hasText: '에어컨 켜짐' }).waitFor({ timeout: 5000 });
-    await ev('휴게소 주차');
-    await page.locator('[data-testid=cabin-prompt]', { hasText: '휴식 시작할까요?' }).waitFor({ timeout: 8000 });
-    await page.locator('[data-testid=cabin-prompt]').getByRole('button', { name: '휴식 시작' }).click();
-    await page.locator('.rest-line.resting').first().waitFor({ timeout: 5000 });
-    await btn('휴식 종료').click();
-    await page.waitForTimeout(500);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await phoneV();
+    await page.locator('[data-testid=phone-trip-status]').waitFor();
     if (await page.locator('[data-testid=cabin-prompt], .cabin-row, [data-testid=pet-stay]').count()) throw new Error('휴대폰 화면에 차량 상태 안내가 보임');
-    return '차량 화면: 창문 안내 → 에어컨 켜짐 → 뒷문 휴식 시작·종료 / 휴대폰 화면: 표시 없음';
+    await wideV();
+    await page.locator('.cd.v5').waitFor();
+    return '창문 안내 → 에어컨 켜짐 / 휴대폰: 표시 없음';
   });
 
-  await step('강릉 목적지 도착 → 여행지 활동(여행 계속)', async () => {
-    await page.locator('.drive-head .t', { hasText: '근처에 도착했어요' }).waitFor({ timeout: 120000 });
-    if (await page.locator('.rest-line').count() || await page.locator('.rr-card').count()) throw new Error('도착 후에도 휴식 알림/추천이 보임');
-    await page.locator('.ca', { hasText: '여행지 활동 시작' }).click();
+  await step('강릉 도착(차량) → 휴대폰에서 여행지 활동', async () => {
+    await page.locator('.arr-title', { hasText: '도착했어요' }).waitFor({ timeout: 120000 });
+    await shot('07c-car-arrived');
+    await page.locator('.arr-acts .ca', { hasText: '여행지 활동 기록' }).click();
+    await page.waitForTimeout(800);
+    await phoneV();
+    await page.goto(`${BASE}#/home`);
     await page.locator('.dest-hero').waitFor({ timeout: 15000 });
     const title = await page.locator('.dest-hero h1').innerText();
     await full('08-destination-home');
@@ -194,11 +204,17 @@ try {
     await full('09-destination-filled');
   });
 
-  await step('돌아가는 길 기록 시작', async () => {
+  await step('돌아가는 길: 휴대폰은 안내만 → 차량에서 집으로 출발', async () => {
+    const t = (await page.locator('[data-testid=return-in-car]').innerText()).replace(/\s+/g, ' ');
+    if (!t.includes('집으로 갈까요')) throw new Error(t);
+    if (await page.getByRole('button', { name: '집으로 출발 · 돌아가는 길 기록' }).count()) throw new Error('휴대폰에 출발 버튼이 있음');
+    await wideV();
+    await page.goto(`${BASE}#/trip/destination`);
     await btn('집으로 출발 · 돌아가는 길 기록').click();
-    await page.locator('.tiles3').waitFor({ timeout: 15000 });
+    await page.locator('.cd.v5').waitFor({ timeout: 15000 });
     await page.getByText(/돌아가는 중/).first().waitFor();
     await shot('10-return-driving');
+    return t.slice(0, 50);
   });
 
   await step('복귀 중 휴식 알림(구간별 독립)', async () => {
@@ -206,10 +222,11 @@ try {
     return '복귀 구간에서도 휴식 상태 카드 동작';
   });
 
-  await step('집 도착 → 여행 완료', async () => {
-    await page.locator('.drive-head .t', { hasText: '집 근처에 도착했어요' }).waitFor({ timeout: 120000 });
-    await page.locator('.ca', { hasText: '여행 완료' }).click();
+  await step('집 도착 → 여행 완료(차량)', async () => {
+    await page.locator('.arr-title', { hasText: '돌아왔어요' }).waitFor({ timeout: 120000 });
+    await page.locator('.arr-acts .ca', { hasText: '여행 완료' }).click();
     await page.waitForTimeout(2500);
+    await phoneV();
   });
 
   await step('AI 여행 일기 초안 자동 생성', async () => {
@@ -342,15 +359,16 @@ try {
     return `미디어 ${cnt}, 좋아요·댓글 저장`;
   });
 
-  await step('여행지 연동 → 이곳으로 여행하기 → 여행 시작 목적지 자동 입력', async () => {
+  await step('여행지 연동 → 이곳으로 여행하기 → 차량 앱 목적지로 안내', async () => {
     await page.locator('.place-pill').click();
     await page.getByRole('button', { name: /이곳으로 여행하기/ }).waitFor();
     await full('21-place');
     const status = await page.locator('.pv-card .badge').first().innerText();
     await page.getByRole('button', { name: /이곳으로 여행하기/ }).click();
-    await page.getByText('커뮤니티 게시글의 장소를 목적지로 불러왔어요').waitFor();
-    const v = await page.getByLabel('목적지', { exact: true }).inputValue();
+    await page.locator('[data-testid=car-only-setup]').waitFor();
+    const v = (await page.locator('.car-only-dest').innerText()).split('\n')[0];
     if (!v.includes('강릉')) throw new Error(`목적지 ${v}`);
+    if (!(await page.locator('.car-only-dest').innerText()).includes('커뮤니티')) throw new Error('커뮤니티 목적지 표시 없음');
     return `동반 표시 “${status}” · 목적지 “${v}”`;
   });
 

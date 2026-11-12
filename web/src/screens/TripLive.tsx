@@ -1,7 +1,7 @@
 // SCREEN 01 — 주행 중 메인 대시보드 (시안: 좌 반려견 카드 | 중앙 지도 | 우 휴식 장소 추천 + 음성 명령)
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  BellRing, Camera, Car, Check, ChevronRight, CircleParking, Clock3, Coffee, Flag, FlaskConical, Fuel, Lock, MapPin, Mic, Navigation, PawPrint, Plus, Stethoscope,
+  BellRing, Camera, Car, Check, ChevronRight, Clock3, Coffee, Flag, FlaskConical, Fuel, Lock, MapPin, Mic, Navigation, PawPrint, Plus, Stethoscope,
   Satellite, Timer, TriangleAlert, Wind, Thermometer, DoorOpen, Snowflake, Hand,
 } from 'lucide-react';
 import { TripController } from '../trip/TripController';
@@ -39,12 +39,6 @@ import { BASIS_LABEL, CHANGE_REASON_LABEL, placeFoundVoice, restDueTitle, restSo
 import { RestIntervalPicker } from './PetForm';
 import { openCarPreview } from '../CarPreview';
 
-const STATUS = {
-  driving: { label: '주행 중', icon: Car },
-  stopped: { label: '일시 정차', icon: CircleParking },
-  resting: { label: '휴식 중', icon: Coffee },
-  ended: { label: '여행 종료', icon: Flag },
-};
 
 export const HAZARD_COLOR: Record<HazardType, string> = {
   accident: '#EF5350', construction: '#F5A623', debris: '#F2C230', congestion: '#8E6BD6', weather: '#5BA4D9', other: '#74849A',
@@ -95,7 +89,6 @@ function rankPlaces(places: Place[], current: GeoPoint, planned: GeoPoint[]): Ro
     .sort((a, b) => a.score - b.score);
 }
 
-const VOICE_CHIP: Partial<Record<VoiceIntent, string>> = { 'rest-area': '주변 휴식 장소 찾아줘', 'rest-left': '다음 휴식까지?', later: '나중에 알려줘', 'rest-start': '휴식 시작' };
 
 export default function TripLive() {
   const live = useSyncExternalStore(TripController.subscribe, TripController.getSnapshot);
@@ -219,7 +212,6 @@ export default function TripLive() {
   const mainPet = callName(live.petNames[0] ?? '우리 강아지');
   const left = live.secondsUntilRest;
   const restElapsed = resting && e.restStartedAt ? (e.lastTick - e.restStartedAt) / 1000 : 0;
-  const St = STATUS[e.status];
   const isReturn = live.legKind === 'return';
   const isExtra = live.legKind === 'extra';
   const route = isExtra
@@ -328,19 +320,6 @@ export default function TripLive() {
   ) : (
     <RoadMap jsKey={mapJsKey(settings)} route={live.route} plannedRoute={planned} markers={markers} height={wide ? 760 : 380} follow={live.position} allowTrafficLayer ariaLabel="실시간 이동 경로 지도" />
   );
-  const restTile = resting
-    ? { k: '휴식 시간', v: formatClock(restElapsed), u: '' }
-    : left <= 0 ? { k: '다음 휴식', v: '지금', u: '' } : { k: '다음 휴식', v: String(Math.max(1, Math.round(left / 60))), u: '분' };
-  const drivingTile = { k: '주행 시간', v: formatHM(e.drivingSec), u: '' };
-  const distTile = { k: '이동 거리', v: live.kind === 'manual' ? '—' : formatKmNum(e.distanceKm), u: live.kind === 'manual' ? '' : 'km' };
-  const tiles = (
-    <>
-      {[drivingTile, distTile].map((t) => <div key={t.k} className="tile3"><p className="k">{t.k}</p><p className="v">{t.v}{t.u && <small>{t.u}</small>}</p></div>)}
-      {live.arrived
-        ? <div className="tile3"><p className="k">휴식 횟수</p><p className="v">{e.restCount}<small>회</small></p></div>
-        : <div className={`tile3 ${resting || left > 0 ? 'rest' : 'due'}`}><p className="k">{restTile.k}</p><p className="v">{restTile.v}{restTile.u && <small>{restTile.u}</small>}</p></div>}
-    </>
-  );
   const notices = (
     <>
       {live.gpsLost && <div className="hint red"><Satellite size={16} /><div>GPS 신호가 약해요. 신호가 돌아오면 경로를 이어서 기록해요. 끊긴 동안의 주행 시간·거리는 추정하지 않아요.</div></div>}
@@ -377,16 +356,6 @@ export default function TripLive() {
       )}
     </>
   );
-  const voiceChips = (
-    <div className="chips" style={{ justifyContent: 'center', gap: 6 }}>
-      {(['rest-area', 'cafe', 'rest-left', ...(!resting && !live.arrived && left <= 10 * 60 ? ['later'] : []), ...(!resting ? ['rest-start'] : [])] as VoiceIntent[]).map((it) => (
-        <button key={it} className="chip" style={{ fontSize: 12.5, minHeight: 30, padding: '0 10px' }} onClick={() => runIntent(it, null)}>
-          {VOICE_CHIP[it] ?? (it === 'cafe' ? `${mainPet}랑 갈 카페` : it)}
-        </button>
-      ))}
-    </div>
-  );
-  const lockText = driving ? (isDemo ? '주행 중에는 사진·일기 편집이 잠겨요 (데모: 휴식 시작은 휴게소 진입으로 처리)' : '주행 중에는 휴식 시작·사진·일기 편집이 잠겨요') : '정차 중 · 장소 상세와 기록 편집을 이용할 수 있어요';
 
   // ═══ 대시보드 상태: 상태마다 보이는 정보·버튼·알림을 분리 ═══
   //  driving(주행) → soon(휴식 10분 전) → due(휴식 시점) → resting(휴식 중) / arrived(목적지 근처 도착)
@@ -499,51 +468,7 @@ export default function TripLive() {
     </div>
   ) : null;
 
-  // ── 얇은 휴식 상태 카드(지도 하단). 빨간색은 쓰지 않음 ──
-  const restCard = dash === 'arrived' ? null : (wide ? safetyLine : null) ?? (
-    <div className={`rest-line ${dash}`} role="status" aria-live="polite">
-      <span className="ic">{dash === 'resting' ? <Timer size={18} /> : <PawPrint size={18} />}</span>
-      <div className="grow" style={{ minWidth: 0 }}>
-        <p className="t num">{dash === 'resting' ? `휴식 중 · ${Math.max(0, Math.floor(restElapsed / 60))}분` : dash === 'due' ? restDueTitle(mainPetName) : `다음 휴식까지 ${restMin}분`}
-          {(dash === 'driving' || dash === 'soon') && restAheadKm != null && <small> 약 {formatKm(restAheadKm)} 앞</small>}</p>
-        <p className="s">{dash === 'resting' ? (live.heatCare ?? '충분히 쉬고 출발해요 · 물과 산책을 챙겨 주세요') : dash === 'due' ? `${Math.round(e.drivingSinceRestSec / 60)}분 이동 · ${basisLabel} ${e.restIntervalMin}분 간격 기준` : `${e.restIntervalMin}분 간격 알림 · 마지막 휴식 후 ${Math.round(e.drivingSinceRestSec / 60)}분`}</p>
-      </div>
-      {dash === 'due' && <span className="rl-acts"><button className="btn sm primary" onClick={findRestPlace}>가까운 휴식 장소</button><button className="btn sm ghost" onClick={remindLater}>나중에</button></span>}
-      {(dash === 'driving' || dash === 'soon') && <span className="thin" aria-hidden="true"><i style={{ width: `${Math.min(100, (e.drivingSinceRestSec / Math.max(1, e.restIntervalMin * 60)) * 100)}%` }} /></span>}
-    </div>
-  );
 
-  // ── 하단 주요 액션: 상태별 4개, 같은 크기 ──
-  const navCell = naviMode === 'demo' ? (
-    <div className="ca status" role="status"><Navigation size={20} /><span>길 안내 중<small>데모 내비</small></span></div>
-  ) : naviMode === 'link' ? (
-    <button className="ca" onClick={() => { const d = live.trip!.destination!; const r = openNavigation(toLabel, d.latitude, d.longitude, false); if (!r.ok) toast(r.message!, 'error'); }}><Navigation size={20} /><span>지도 앱 길 안내<small>내장 내비 미연동</small></span></button>
-  ) : (
-    <div className="ca status off" role="status"><Navigation size={20} /><span>내비 미연동<small>목적지 좌표 없음</small></span></div>
-  );
-  const restStartBtn = (primary: boolean) => (
-    <button className={`ca ${primary ? 'primary' : 'mint'}`} disabled={driving && !isDemo} onClick={() => TripController.beginRest()} title={driving && !isDemo ? '정차 후 휴식을 시작할 수 있어요' : undefined}><Coffee size={20} /><span>휴식 시작{driving && isDemo && <small>데모: 휴게소 진입</small>}</span></button>
-  );
-  const voiceBtn = <button className={`ca ${voice.listening ? 'listening' : ''}`} onClick={onVoice}><Mic size={20} /><span>음성 명령</span></button>;
-  const arriveBtn = <button className="ca deep" onClick={() => setEndSheet(true)}><Flag size={20} /><span>{isReturn ? '집 도착' : isExtra ? '도착' : '목적지 도착'}</span></button>;
-  const photoBtn = (
-    <button className="ca" disabled={driving} onClick={async () => { const added = await addPhotosToTrip(live.trip!.id, (m: string) => toast(m, 'error')); if (added?.length) toast(`사진 ${added.length}장을 여행 기록에 추가했어요.`); }}><Camera size={20} /><span>여행 사진 기록{driving && <small>주행 중 잠김</small>}</span></button>
-  );
-  const actions = dash === 'arrived' ? [
-    <button key="go" className="ca deep" disabled={ending} onClick={isReturn ? finish : arrive}><Flag size={20} /><span>{isReturn ? '여행 완료' : '여행지 활동 시작'}</span></button>,
-    <button key="cont" className="ca" onClick={() => toast(isReturn ? '집에 도착하면 여행 완료를 눌러 주세요.' : '목적지 근처예요. 주차 후 여행지 활동을 시작해 주세요.')}><Car size={20} /><span>계속 주행</span></button>,
-    photoBtn,
-    voiceBtn,
-  ] : dash === 'resting' ? [
-    <button key="end" className="ca primary" onClick={async () => { const d = await TripController.finishRest(); toast(`휴식을 마쳤어요 · ${formatDuration(d)}`); }}><Timer size={20} /><span>휴식 종료</span></button>,
-    photoBtn,
-    <button key="iv" className="ca" onClick={() => setIntervalSheet(true)}><BellRing size={20} /><span>휴식 알림 설정</span></button>,
-    arriveBtn,
-  ] : dash === 'due' ? [
-    <span key="r" style={{ display: 'contents' }}>{restStartBtn(true)}</span>, navCell, voiceBtn, arriveBtn,
-  ] : [
-    navCell, <span key="r" style={{ display: 'contents' }}>{restStartBtn(false)}</span>, voiceBtn, arriveBtn,
-  ];
 
   // ── 상단 여행 상태(도착 안내 통합) ──
   const etaAt = route.etaMinutes != null ? new Date(e.lastTick + route.etaMinutes * 60_000) : null;
@@ -677,39 +602,39 @@ export default function TripLive() {
     );
   }
 
+  // ═══ 휴대폰 화면: 주행 대시보드 대신 '차량에서 기록 중' 상태만(조작·안내는 차량 앱) ═══
   return (
-    <div className="drive-m">
-      <div className="map-area">
-        {mapEl}
-        <div className="top">
-          <div className="drive-head">
-            <button style={{ all: 'unset', cursor: 'pointer' }} aria-label="홈으로 (기록은 계속돼요)" onClick={() => navigate('/home')}><PetStack pets={tripPets} names={live.petNames} size={40} /></button>
-            <div className="grow" style={{ minWidth: 0 }}><p className="t ellipsis">{dash === 'arrived' ? headTitle : headline}</p><p className="s ellipsis num">{dash === 'arrived' ? headSub : routeLine}</p></div>
-            {isDemo ? <button className="demo-tag" onClick={() => setStateSheet(true)}><FlaskConical size={12} />데모</button> : <span className={`status-pill ${e.status}`} role="status" style={{ height: 28, fontSize: 12.5, padding: '0 10px' }}><St.icon size={14} />{St.label}</span>}
-          </div>
-          {dash !== 'arrived' && hzPill}
+    <div className="screen phone-trip" data-testid="phone-trip-status">
+      <section className="pt-hero">
+        <PetStack pets={tripPets} names={live.petNames} size={52} />
+        <div className="grow" style={{ minWidth: 0 }}>
+          <span className="pt-live"><i />{dash === 'arrived' ? '도착 확인 대기' : resting ? '휴식 중' : '차량에서 기록 중'}{isDemo && <em>데모</em>}</span>
+          <h1 className="h-md">{dash === 'arrived' ? headTitle : headline}</h1>
+          <p className="t-cap">{dash === 'arrived' ? '차량 화면에서 도착을 확인하면 여기서 여행지 기록을 시작할 수 있어요' : routeLine}</p>
         </div>
+      </section>
+      {progress != null && dash !== 'arrived' && (
+        <div className="card">
+          <div className="jp-head"><span className="num">{fromLabel} → {toLabel} · {formatKmNum(e.distanceKm)} / {formatKmNum(totalKm!)}km</span><span>{e.restCount ? `휴식 ${e.restCount}회` : '휴식 아직 없음'}</span></div>
+          <JourneyBar progress={progress} restAt={restAt} />
+        </div>
+      )}
+      <ul className="pt-stats card">
+        <li><span>주행 시간</span><b className="num">{formatHM(e.drivingSec)}</b></li>
+        <li><span>이동 거리</span><b className="num">{live.kind === 'manual' ? '—' : `${formatKmNum(e.distanceKm)}km`}</b></li>
+        <li><span>휴식</span><b className="num">{e.restCount}회</b></li>
+        {etaClock && dash !== 'arrived' && <li><span>도착 예정</span><b className="num">{etaClock}</b></li>}
+      </ul>
+      <div className="pt-info card">
+        <p><Car size={18} /><span>휴식 알림 · 동반 장소 제안 · 안전 안내는 <b>차량 화면과 음성</b>으로 알려 드려요.</span></p>
+        <p><Camera size={18} /><span>도착하면 이 휴대폰에서 사진 · 메모 · 방문 장소를 남기고, 여행 기록과 커뮤니티를 이용할 수 있어요.</span></p>
       </div>
-      <div className="drive-sheet">
-        <span className="grab" aria-hidden="true" />
-        {restCard}
-        {progress != null && dash !== 'arrived' && (
-          <div>
-            <div className="jp-head"><span className="num">{fromLabel} → {toLabel} · {formatKmNum(e.distanceKm)} / {formatKmNum(totalKm!)}km</span><span>{e.restCount ? `휴식 ${e.restCount}회` : '휴식 아직 없음'}</span></div>
-            <JourneyBar progress={progress} restAt={restAt} />
-          </div>
-        )}
-        <div className="tiles3">{tiles}</div>
-        {notices}
-        {recSection}
-        <div className="m-actions">{actions}</div>
-        {voice.text && <p className="voice-line">{voice.text}</p>}
-        {dash !== 'arrived' && voiceChips}
-        <p id="drive-lock" className="drive-lock"><Lock size={13} />{lockText}</p>
-        <button className="link" style={{ justifySelf: 'center', fontSize: 12.5 }} onClick={openCarPreview}>차량 화면(1600×900)으로 보기</button>
-        {details}
+      {isDemo && <button className="btn primary block xl" onClick={openCarPreview}><Car size={20} />차량 화면 보기 (데모)</button>}
+      <div className="btn-row">
+        <button className="btn ghost" onClick={() => navigate('/album')}>여행 기록</button>
+        <button className="btn ghost" onClick={() => navigate('/community')}>커뮤니티</button>
       </div>
-      {sheets()}
+      {isDemo && <p className="t-cap" style={{ textAlign: 'center' }}>데모: 같은 기기에서 차량 주행을 시뮬레이션해요. 실제로는 차량 앱의 기록이 계정으로 연결돼요.</p>}
     </div>
   );
 

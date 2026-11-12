@@ -20,6 +20,13 @@ let queue: Pending[] = [];
 /** 방향지시등 작동·차량 경고 중에는 새 안내를 미룸(기획서 3장) */
 let held = false;
 
+/** 휴대폰 화면에서는 주행 안내 음성을 내지 않음(차량 앱이 안내) */
+let muted = false;
+export function setSpeechMuted(m: boolean) {
+  muted = m;
+  if (m) { queue = []; synth()?.cancel(); playing = null; }
+}
+
 export function setSpeechHold(hold: boolean) {
   if (held === hold) return;
   held = hold;
@@ -60,7 +67,7 @@ function playNext() {
 export function speak(text: string, priority: SpeechPriority = 'info') {
   try {
     const s = synth();
-    if (!s) return;
+    if (!s || muted) return;
     const rank = SPEECH_RANK[priority];
     const playingRank = playing && s.speaking ? playing.rank : null;
     if (held || arbitrate(playingRank, rank) === 'queue') {
