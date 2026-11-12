@@ -1,0 +1,34 @@
+# Pleos Connect SDK 공개 API 목록 추출(시그니처 확인용). 키·비밀번호 없이 공개 Maven 저장소만 사용합니다.
+name: pleos-api
+on:
+  push:
+    paths: ['.github/workflows/pleos-api.yml']
+  workflow_dispatch:
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: Download AARs & dump public API
+        run: |
+          set -u
+          REPO=https://nexus-playground.pleos.ai/repository/maven-releases/ai/pleos/playground
+          mkdir -p out
+          for M in Vehicle NaviHelper TextToSpeech SpeechToText FusedLocation Adas LLM Tts Stt Llm VehicleSdk; do
+            META=$(curl -fsS "$REPO/$M/maven-metadata.xml" || true)
+            if [ -z "$META" ]; then echo "[$M] metadata 없음"; continue; fi
+            VER=$(echo "$META" | grep -oP '(?<=<release>)[^<]+' || echo "$META" | grep -oP '(?<=<version>)[^<]+' | tail -1)
+            echo "[$M] versions: $(echo "$META" | grep -oP '(?<=<version>)[^<]+' | tr '\n' ' ') → $VER"
+            curl -fsS -o "$M.aar" "$REPO/$M/$VER/$M-$VER.aar" || { curl -fsS -o "$M.jar" "$REPO/$M/$VER/$M-$VER.jar" && cp "$M.jar" classes-$M.jar; }
+            curl -fsS -o "out/$M-$VER.pom" "$REPO/$M/$VER/$M-$VER.pom" || true
+            if [ -f "$M.aar" ]; then unzip -q -o "$M.aar" classes.jar AndroidManifest.xml -d "x-$M" || true; cp "x-$M/classes.jar" classes-$M.jar; cp "x-$M/AndroidManifest.xml" "out/$M-AndroidManifest.xml" 2>/dev/null || true; fi
+            [ -f classes-$M.jar ] || continue
+            for c in $(unzip -Z1 classes-$M.jar | grep '\.class$' | sed 's/\.class$//; s#/#.#g'); do
+              javap -cp classes-$M.jar -public "$c" 2>/dev/null
+            done > "out/$M-$VER-api.txt"
+            echo "[$M] $(wc -l < out/$M-$VER-api.txt) lines"
+          done
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with: { name: pleos-api, path: out }
