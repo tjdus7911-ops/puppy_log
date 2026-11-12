@@ -119,7 +119,7 @@ fun DashboardScreen(live: LiveUi, vm: TripViewModel, onVoice: () -> Unit, voiceA
                     Icon(Icons.Outlined.LocalCafe, null, tint = Mung.MintText, modifier = Modifier.size(34.dp))
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text(if (live.secondsUntilRest <= 600) "곧 쉬어갈 시간이에요!" else "다음 휴식까지 ${fmtDuration(live.secondsUntilRest)}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Mung.Text)
+                        Text(if (live.reminder != null || live.secondsUntilRest <= 600) "곧 쉬어갈 시간이에요!" else "다음 휴식까지 ${fmtDuration(live.secondsUntilRest)}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Mung.Text)
                         Text("눌러서 가까운 휴식 장소 찾기", fontSize = 14.sp, color = Mung.MintText)
                     }
                 }
@@ -204,11 +204,12 @@ fun DashboardScreen(live: LiveUi, vm: TripViewModel, onVoice: () -> Unit, voiceA
         }
     }
 
-    live.reminder?.let { r ->
+    // '곧 쉬어갈 시간'은 왼쪽 카드로만 알리고, 휴식 시간이 되면 창으로 묻습니다(주행 중 팝업 최소화)
+    live.reminder?.takeIf { it.due }?.let { r ->
         val pet = live.petNames.first()
         AlertDialog(
             onDismissRequest = { vm.dismissReminder() },
-            title = { Text(if (r.due) RestCare.dueTitle(pet) else RestCare.soonVoice(pet)) },
+            title = { Text(RestCare.dueTitle(pet) + " (${r.drivenMinutes}분 주행)") },
             text = { Text("${live.policy.basis.label} ${live.policy.intervalMinutes}분 간격 안내예요. 반려견의 피로도를 측정하지 않아요.") },
             confirmButton = { TextButton(onClick = { vm.findRestPlaces() }) { Text("가까운 휴식 장소 찾기") } },
             dismissButton = {

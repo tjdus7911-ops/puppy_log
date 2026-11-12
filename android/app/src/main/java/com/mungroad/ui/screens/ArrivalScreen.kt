@@ -69,6 +69,7 @@ fun ArrivalScreen(live: LiveUi, vm: TripViewModel, onSaved: (String) -> Unit) {
                 }
             }
             live.cabinPrompt?.let { CabinPromptCard(it, live, vm) }
+            if (live.isDemo) DemoCabinPanel(vm)
             if (!atHome) {
                 MCard(Modifier.fillMaxWidth()) {
                     Text("여행지 기록", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -85,7 +86,6 @@ fun ArrivalScreen(live: LiveUi, vm: TripViewModel, onSaved: (String) -> Unit) {
                     BigButton("기록 남기기", enabled = record.isNotBlank()) { vm.recordPlace(record.trim()); record = "" }
                 }
             }
-            if (live.isDemo) DemoCabinPanel(vm)
         }
         Column(Modifier.weight(0.45f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             if (!atHome) {

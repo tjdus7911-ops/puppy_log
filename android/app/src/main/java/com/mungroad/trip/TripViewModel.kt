@@ -582,6 +582,8 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             it?.copy(
                 legKind = null, doneKm = it.doneKm + e.distanceKm, doneDrivingSec = it.doneDrivingSec + e.drivingSec, doneRests = it.doneRests + e.restCount,
                 reminder = null, suggestedPlace = null,
+                // 주행 중 안내(창문·더위·뒷문 휴식)는 도착하면 닫음. '내리기 전 확인'만 남김
+                cabinPrompt = it.cabinPrompt?.takeIf { p -> p.kind == CabinPromptKind.LEAVE_CHECK },
             )
         }
     }
@@ -618,7 +620,7 @@ class TripViewModel(app: Application) : AndroidViewModel(app) {
             trip.copy(
                 status = TripStatus.ENDED, phase = TripPhase.COMPLETED, endTime = now,
                 title = if (trip.titleEdited) trip.title else if (dest != null) "$withJ $dest 여행" else "$withJ 달린 길",
-                totalDistanceKm = after.doneKm, drivingDurationSeconds = after.doneDrivingSec.toLong(), elapsedDurationSeconds = (now - trip.startTime) / 1000,
+                totalDistanceKm = after.doneKm, drivingDurationSeconds = after.doneDrivingSec.toLong(), elapsedDurationSeconds = if (trip.isDemo) legs.sumOf { it.elapsedDurationSeconds } else (now - trip.startTime) / 1000,
                 startLat = first?.startLat, startLng = first?.startLng, endLat = lastLeg?.endLat, endLng = lastLeg?.endLng, endRegion = dest, updatedAt = now,
             ),
         )

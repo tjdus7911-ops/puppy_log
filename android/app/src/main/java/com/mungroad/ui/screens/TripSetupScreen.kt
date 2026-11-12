@@ -155,7 +155,7 @@ fun TripSetupScreen(vm: TripViewModel, onAddPet: () -> Unit) {
                             Text("휴식 알림", Modifier.weight(1f), fontSize = 18.sp)
                             Text("${policy.intervalMinutes}분마다", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Mung.Primary)
                         }
-                        Text(policy.basis.label + " · " + policy.reasons.joinToString(" · "), fontSize = 14.sp, color = Mung.TextSecondary)
+                        Text(policy.reasons.joinToString(" · "), fontSize = 14.sp, color = Mung.TextSecondary)
                         if (policy.basis == com.mungroad.domain.RestBasis.GUIDELINE) Text(RestCare.GUIDELINE_NOTE, fontSize = 13.sp, color = Mung.TextSecondary)
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
