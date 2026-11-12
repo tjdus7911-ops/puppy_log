@@ -62,7 +62,7 @@ try {
     await page.getByPlaceholder('예: 6.5').fill('7.2');
     await page.getByRole('radio', { name: '중형견' }).click();
     await btn('등록하기').click();
-    await page.getByText('오늘은 어디로 갈까요?').waitFor();
+    await page.getByText('특별한 드라이브').waitFor();
     await page.getByText('사슴').first().waitFor();
     await full('01-home-before');
   });
