@@ -5,12 +5,12 @@
 //  - 그 외                     → 일반 홈
 import { useState, useSyncExternalStore } from 'react';
 import { petInterval } from '../domain/restCare';
-import { Bell, BookImage, Camera, Car, Compass, Image as ImageIcon, MapPinned, MonitorSmartphone, ChevronRight, Coffee, Navigation, Plus, Share2, ShieldCheck, Sparkles, Trees, Users, Waves } from 'lucide-react';
+import { Bell, BookImage, Camera, Car, Image as ImageIcon, MapPinned, MonitorSmartphone, ChevronRight, Coffee, Navigation, PawPrint, Plus, Share2, ShieldCheck, Sparkles, Trees, Users, Waves } from 'lucide-react';
 import { SAFETY_ITEMS } from '../domain/plan';
 import { realStats, useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { formatDuration, formatKm, formatKoreanDate, formatShortDate } from '../domain/format';
-import { callName, mainPetOf, welcomeLead } from '../domain/tripText';
+import { callName, mainPetOf } from '../domain/tripText';
 import { useCommunity } from '../app/community';
 import { regionShort } from '../domain/regions';
 import type { Trip } from '../domain/models';
@@ -77,10 +77,11 @@ function IdleHome() {
   const others = pets.filter((p) => p.id !== main?.id);
 
   const quick = [
+    // Figma M1: 여행 기록 · 커뮤니티 · 발도장 · 내 반려견
     { icon: BookImage, t: '여행 기록', s: completed.length ? `${completed.length}개 여행` : '앨범 · 일기', go: () => navigate('/album'), tone: 'blue' },
-    { icon: MapPinned, t: '발도장', s: regions.size ? `${regions.size}개 지역` : '지역 지도', go: () => navigate('/pawmap'), tone: 'mint' },
     { icon: Users, t: '커뮤니티', s: '여행 후기', go: () => navigate('/community'), tone: 'violet' },
-    { icon: Compass, t: '동반 장소', s: '카페 · 산책로', go: () => navigate('/explore'), tone: 'amber' },
+    { icon: MapPinned, t: '발도장', s: regions.size ? `${regions.size}개 지역` : '지역 지도', go: () => navigate('/pawmap'), tone: 'mint' },
+    { icon: PawPrint, t: '내 반려견', s: '프로필 · 여행 케어', go: () => navigate('/pets'), tone: 'amber' },
   ] as const;
 
   return (
@@ -109,7 +110,8 @@ function IdleHome() {
                 {others.length > 2 && <span className="mh-av more">+{others.length - 2}</span>}
                 <button className="mh-av add" onClick={() => navigate('/pet/new')} aria-label="반려견 추가"><Plus size={18} /></button>
               </div>
-              <h2>{welcomeLead(main.name)}<br />특별한 드라이브</h2>
+              <h2>반려견과 떠나는<br />특별한 드라이브</h2>
+              <p className="mh-brand">멍로드 🐾</p>
               <p>{main.name} · {SIZE_LABEL[main.size]} · 휴식 {petInterval(main).minutes}분 간격{others.length ? ` · 외 ${others.length}마리` : ''}</p>
             </>
           ) : (
@@ -123,14 +125,19 @@ function IdleHome() {
 
       {/* 진행 중인 여행(차량에서 기록 중): 상태 카드 → 자세히 보기 */}
       {live.active && live.driving && live.trip && (
-        <button className="mh-live" onClick={() => navigate('/trip/live')} data-testid="home-live-trip">
-          <span className="dot" />
-          <span className="grow">
-            <b>{live.arrived ? (live.legKind === 'return' ? '집 근처에 도착했어요' : '목적지 근처에 도착했어요') : live.legKind === 'return' ? '집으로 돌아가는 중' : `${live.trip.destinationName ?? '목적지'} 가는 중`}</b>
-            <small>{live.arrived ? '눌러서 여행지 기록을 시작해요' : `차량에서 기록 중 · 주행 ${formatDuration(live.engine?.drivingSec ?? 0)} · ${formatKm(live.trip.totalDistanceKm)}`}{live.trip.isDemo ? ' · 데모' : ''}</small>
-          </span>
-          <ChevronRight size={20} />
+        <button className="mh-live-card" onClick={() => navigate('/trip/live')} data-testid="home-live-trip">
+          <span className="pill"><i />{live.arrived ? (live.legKind === 'return' ? '집 근처에 도착' : '여행지 도착') : '차량에서 기록 중'}{live.trip.isDemo ? ' · 데모' : ''}</span>
+          <b>{live.petNames.length ? `${live.petNames.map(callName).join(' · ')}와 ` : ''}{live.trip.destinationName ?? '목적지'} 여행</b>
+          <small>{live.legKind === 'return' ? '집으로 돌아가는 중 · ' : ''}주행 {formatDuration(live.engine?.drivingSec ?? 0)} · {formatKm(live.trip.totalDistanceKm)}</small>
+          <small className="soft">주행·휴식 안내는 차량 화면에서 해요</small>
         </button>
+      )}
+      {live.active && live.driving && live.trip && live.legKind !== 'return' && (
+        <section className="card mh-todo" aria-label="다음 할 일">
+          <p className="t-cap">다음 할 일</p>
+          <p className="t">{live.arrived ? '여행지에 도착했어요. 사진을 남겨 보세요' : '도착하면 여행지 사진을 남겨 보세요'}</p>
+          <button className="btn primary block" onClick={() => navigate('/trip/live')}><Camera size={18} />여행지 기록 시작</button>
+        </section>
       )}
 
       {/* 다음 여행: 여행은 차량에서 시작(휴대폰은 준비물 체크·데모 진입만) */}

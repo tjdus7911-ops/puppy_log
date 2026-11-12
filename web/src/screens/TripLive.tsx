@@ -29,7 +29,7 @@ import { speak } from '../trip/speech';
 import { completeTripWithDraft } from '../trip/completeTrip';
 import { EmptyState, Loading, Sheet } from '../ui/components';
 import { PetAvatar, PlaceThumb } from '../ui/Art';
-import { JourneyBar, PhotoFallback } from '../ui/kit';
+import { PhotoFallback } from '../ui/kit';
 import { regionShort } from '../domain/regions';
 import { RoadMap } from '../ui/RoadMap';
 import type { MapMarker } from '../ui/MapView';
@@ -298,12 +298,8 @@ export default function TripLive() {
 
 
   // ── 여정 진행: 이동 거리 + 남은 거리(데모: 경로 기준 추정, 실제: 직선) / 다음 휴식 예정 지점(평균 속도로 추정)
-  const remain = route.remainingKm;
-  const totalKm = remain != null ? e.distanceKm + remain : null;
-  const progress = totalKm && totalKm > 0 ? e.distanceKm / totalKm : null;
   const avgKmh = e.drivingSec > 120 ? e.distanceKm / (e.drivingSec / 3600) : 60;
   const restAheadKm = !resting && left > 0 ? (left / 3600) * avgKmh : null;
-  const restAt = totalKm && restAheadKm != null ? (e.distanceKm + restAheadKm) / totalKm : null;
   const fromLabel = isReturn ? (live.trip.destinationName ?? '여행지') : regionShortLabel(live.trip.startLocation, isDemo ? '서울' : '출발');
   const toLabel = isReturn ? (isDemo ? '서울' : '집') : isExtra ? '다음 장소' : (live.trip.destinationName ?? '목적지');
   const headline = `${withPets(live.petNames)} ${isReturn ? '돌아가는 중' : isExtra ? '이동 중' : `${live.trip.destinationName ? `${shortDest(live.trip.destinationName)} ` : ''}가는 중`}`;
@@ -633,41 +629,37 @@ export default function TripLive() {
   // ═══ 휴대폰 화면: 주행 대시보드 대신 '차량에서 기록 중' 상태만(조작·안내는 차량 앱) ═══
   return (
     <div className="screen phone-trip" data-testid="phone-trip-status">
-      <section className="pt-hero">
-        <PetStack pets={tripPets} names={live.petNames} size={52} />
-        <div className="grow" style={{ minWidth: 0 }}>
-          <span className="pt-live"><i />{dash === 'arrived' ? '도착' : resting ? '휴식 중' : '차량에서 기록 중'}{isDemo && <em>데모</em>}</span>
-          <h1 className="h-md">{dash === 'arrived' ? headTitle : headline}</h1>
-          <p className="t-cap">{dash === 'arrived' ? (isReturn ? '집에 도착했다면 여행을 완료해 기록을 저장해요' : '주차했다면 여행지 기록을 시작해 사진·메모를 남겨요') : routeLine}</p>
-        </div>
+      {/* Figma M2: 차량에서 기록 중 — 주행 조작 없이 상태만 */}
+      <h1 className="h-lg">여행</h1>
+      <section className="card pt-center">
+        <Car size={40} color="var(--primary)" />
+        <span className="pt-live"><i />{dash === 'arrived' ? '도착' : resting ? '휴식 중' : '차량에서 기록 중'}{isDemo && <em>데모</em>}</span>
+        <h2 className="h-md">{dash === 'arrived' ? headTitle : '차량에서 기록 중이에요'}</h2>
+        <p className="t-cap">{dash === 'arrived' ? (isReturn ? '집에 도착했다면 여행을 완료해 기록을 저장해요' : '주차했다면 여행지 기록을 시작해 사진·메모를 남겨요') : <>주행·휴식·안전 안내는 차량 화면에서 해요.<br />휴대폰에선 상태만 보고, 도착하면 여행지를 기록해요.</>}</p>
       </section>
-      {progress != null && dash !== 'arrived' && (
-        <div className="card">
-          <div className="jp-head"><span className="num">{fromLabel} → {toLabel} · {formatKmNum(e.distanceKm)} / {formatKmNum(totalKm!)}km</span><span>{e.restCount ? `휴식 ${e.restCount}회` : '휴식 아직 없음'}</span></div>
-          <JourneyBar progress={progress} restAt={restAt} />
+      <section className="card" style={{ display: 'grid', gap: 10 }}>
+        <div className="row" style={{ gap: 10 }}>
+          <PetStack pets={tripPets} names={live.petNames} size={36} />
+          <b className="grow" style={{ minWidth: 0 }}>{headline}</b>
         </div>
+        <ul className="pt-stats three">
+          <li><span>주행</span><b className="num">{formatHM(e.drivingSec)}</b></li>
+          <li><span>거리</span><b className="num">{live.kind === 'manual' ? '—' : `${formatKmNum(e.distanceKm)}km`}</b></li>
+          <li><span>휴식까지</span><b className="num">{resting ? '휴식 중' : `${Math.max(0, Math.round(live.secondsUntilRest / 60))}분`}</b></li>
+        </ul>
+        <p className="t-cap">휴식 {e.restIntervalMin}분마다 · {basisLabel}{dash !== 'arrived' ? ` · ${routeLine}` : ''}</p>
+      </section>
+      {!isReturn && (
+        <section className="card pt-arrive">
+          <p className="t">{dash === 'arrived' ? '여행지에 도착했어요' : '여행지에 도착했나요?'}</p>
+          <p className="t-cap">차량에서 '도착했어요'를 누르면 여기서 사진·장소를 기록할 수 있어요.</p>
+          {dash === 'arrived' && <button className="btn primary block xl" disabled={ending} onClick={arrive} data-testid="phone-arrive"><Camera size={20} />여행지 기록 시작</button>}
+        </section>
       )}
-      <ul className="pt-stats card">
-        <li><span>주행 시간</span><b className="num">{formatHM(e.drivingSec)}</b></li>
-        <li><span>이동 거리</span><b className="num">{live.kind === 'manual' ? '—' : `${formatKmNum(e.distanceKm)}km`}</b></li>
-        <li><span>휴식</span><b className="num">{e.restCount}회</b></li>
-        {etaClock && dash !== 'arrived' && <li><span>도착 예정</span><b className="num">{etaClock}</b></li>}
-      </ul>
-      <div className="pt-info card">
-        <p><Car size={18} /><span>휴식 알림 · 동반 장소 제안 · 안전 안내는 <b>차량 화면과 음성</b>으로 알려 드려요.</span></p>
-        <p><Camera size={18} /><span>도착하면 이 휴대폰에서 사진 · 메모 · 방문 장소를 남기고, 여행 기록과 커뮤니티를 이용할 수 있어요.</span></p>
-      </div>
-      {dash === 'arrived' && (
-        <button className="btn primary block xl" disabled={ending} onClick={isReturn ? finish : arrive} data-testid="phone-arrive">
-          {isReturn ? <><Flag size={20} />여행 완료</> : <><Camera size={20} />여행지 기록 시작</>}
-        </button>
+      {isReturn && dash === 'arrived' && (
+        <button className="btn primary block xl" disabled={ending} onClick={finish} data-testid="phone-arrive"><Flag size={20} />여행 완료</button>
       )}
       {isDemo && <button className={`btn ${dash === 'arrived' ? 'ghost' : 'primary'} block ${dash === 'arrived' ? '' : 'xl'}`} onClick={openCarPreview}><Car size={20} />차량 화면 보기 (데모)</button>}
-      <div className="btn-row">
-        <button className="btn ghost" onClick={() => navigate('/home')}>홈</button>
-        <button className="btn ghost" onClick={() => navigate('/album')}>여행 기록</button>
-        <button className="btn ghost" onClick={() => navigate('/community')}>커뮤니티</button>
-      </div>
       {isDemo && <p className="t-cap" style={{ textAlign: 'center' }}>데모: 같은 기기에서 차량 주행을 시뮬레이션해요. 실제로는 차량 앱의 기록이 계정으로 연결돼요.</p>}
     </div>
   );

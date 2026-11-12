@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
 import { petInterval } from '../domain/restCare';
-import { House, ChevronRight, FlaskConical, MonitorSmartphone, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 , Map as MapIcon } from 'lucide-react';
+import { Car, Download, MapPin, PawPrint, House, ChevronRight, FlaskConical, MonitorSmartphone, Info, LocateFixed, Plus, Server, ShieldCheck, Trash2, Volume2 , Map as MapIcon } from 'lucide-react';
 import { realStats, useStore } from '../app/store';
 import { navigate } from '../app/router';
 import { repo } from '../data/db';
@@ -87,7 +87,7 @@ export default function MyPage() {
 
   return (
     <div className="screen">
-      <TopBar title="마이페이지" showBack={false} />
+      <TopBar title="내 정보" showBack={false} />
 
       <section>
         <div className="section-head"><h2 className="h-md">반려견 프로필</h2><button className="link" onClick={() => navigate('/pet/new')}><Plus size={16} />추가</button></div>
@@ -106,6 +106,20 @@ export default function MyPage() {
         </div>
       </section>
 
+      {/* Figma M9: 앱 설치 · 집 위치 · 차량 앱 지표 · 여행 케어 정보 */}
+      <section className="section">
+        <div className="card my-list">
+          {([
+            [Download, '앱 설치', '홈 화면에 추가', () => document.getElementById('my-install')?.scrollIntoView({ behavior: 'smooth' })],
+            [MapPin, '집 위치', settings.homeLocation ? settings.homeLocation.name : '아직 저장하지 않았어요', () => document.getElementById('my-home')?.scrollIntoView({ behavior: 'smooth' })],
+            [Car, '차량 앱 지표', '여행 기록 완료율 · 휴식 알림 응답률', () => document.getElementById('my-metrics')?.scrollIntoView({ behavior: 'smooth' })],
+            [PawPrint, '여행 케어 정보', '이 기기에만 저장 · 언제든 지우기', () => navigate(pets[0] ? `/pet/${pets[0].id}` : '/pet/new')],
+          ] as const).map(([Ic, t, sub, go]) => (
+            <button key={t} onClick={go}><Ic size={20} color="var(--primary)" /><span className="grow"><b>{t}</b><span className="t-cap">{sub}</span></span><ChevronRight size={18} color="var(--text-3)" /></button>
+          ))}
+        </div>
+      </section>
+
       <section className="section">
         <h2 className="h-md" style={{ marginBottom: 12 }}>누적 여행 통계</h2>
         <div className="grid-2">
@@ -118,7 +132,7 @@ export default function MyPage() {
       </section>
 
       <section className="section">
-        <h2 className="h-md" style={{ marginBottom: 12 }}>차량 앱 지표 <span className="t-cap">(이 기기 기록 · {metricsSrc})</span></h2>
+        <h2 id="my-metrics" className="h-md" style={{ marginBottom: 12 }}>차량 앱 지표 <span className="t-cap">(이 기기 기록 · {metricsSrc})</span></h2>
         <div className="card metrics" data-testid="car-metrics">
           {([['휴식 알림 응답률', '휴식 알림 뒤 휴식 시작·휴식지 찾기로 이어진 비율', metrics.restResponse, METRIC_TARGET.restResponse], ['장소 제안 수락률', '주행 중 동반 장소 제안이 들르기(경유지)로 이어진 비율', metrics.placeAccept, METRIC_TARGET.placeAccept], ['여행 기록 완료율', '시작한 여행이 마무리·저장까지 이어진 비율', metrics.completion, METRIC_TARGET.completion]] as const).map(([k, d, r, tg]) => (
             <div key={k} className="row" style={{ alignItems: 'flex-start', padding: '8px 0' }}>
@@ -208,13 +222,13 @@ export default function MyPage() {
 
       {!wideScreen && (
         <section className="section">
-          <h2 className="h-md" style={{ marginBottom: 12 }}>앱 설치</h2>
+          <h2 id="my-install" className="h-md" style={{ marginBottom: 12 }}>앱 설치</h2>
           {installSt === 'installed' ? <div className="card"><p style={{ fontWeight: 650 }}>앱으로 설치되어 있어요</p><p className="t-cap mt-8">홈 화면의 멍로드 아이콘으로 열고 있어요.</p></div> : installSt === 'unsupported' ? <div className="card"><p className="t-sub">이 브라우저는 설치를 지원하지 않아요. 안드로이드는 Chrome, 아이폰은 Safari로 열어 주세요.</p></div> : <InstallCard dismissible={false} />}
         </section>
       )}
 
       <section className="section">
-        <h2 className="h-md" style={{ marginBottom: 12 }}>집 위치</h2>
+        <h2 id="my-home" className="h-md" style={{ marginBottom: 12 }}>집 위치</h2>
         <div className="card" data-testid="home-loc">
           <div className="row"><House size={20} color="var(--primary)" /><p className="grow" style={{ fontWeight: 650 }}>{settings.homeLocation ? settings.homeLocation.name : '저장한 집 위치가 없어요'}</p>
             {settings.homeLocation && <button className="btn ghost sm" onClick={() => { updateSettings({ homeLocation: null }); toast('집 위치를 지웠어요.'); }}>지우기</button>}

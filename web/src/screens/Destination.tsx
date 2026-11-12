@@ -129,7 +129,7 @@ export default function Destination() {
           </span>
         </div>
         <div className="cap" style={heroPhoto ? undefined : { color: 'var(--text)' }}>
-          <h1>{trip.title || '여행지에 도착했어요'}</h1>
+          <h1>{`${trip.destinationName ?? (trip.endLocation ? regionLabel(trip.endLocation) : '여행지')} 여행지 기록`}</h1>
           <p className="num">{trip.endLocation ? regionLabel(trip.endLocation) : trip.destinationName ?? '목적지'} 도착 {trip.arrivedAt ? formatTime(trip.arrivedAt) : ''} · 가는 길 {formatKm(trip.totalDistanceKm)} · 주행 {formatDuration(trip.drivingDurationSeconds)}</p>
         </div>
       </section>

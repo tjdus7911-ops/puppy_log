@@ -277,11 +277,11 @@ export default function TripDetail({ id, route, onChanged }: { id: string; route
         <button className="diary-preview" onClick={() => navigate(`/album/${trip.id}/diary`)} aria-label="AI 일기 화면 열기">
           <span className="row" style={{ gap: 8 }}><Sparkles size={20} color="var(--primary)" /><b className="grow" style={{ fontWeight: 600, fontSize: 16 }}>AI 여행 일기</b>{trip.diarySource !== 'none' && <span className="badge photo">{trip.diarySource === 'ai' ? 'AI 생성' : trip.diarySource === 'template' ? '초안' : '직접 작성'}</span>}</span>
           <span className="t-body" style={{ color: 'var(--text-2)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{trip.diaryText || '이동 기록·방문 장소·사진·메모를 바탕으로 여행 일기를 만들어 드려요.'}</span>
-          <span className="row" style={{ gap: 2, color: 'var(--primary)', fontWeight: 600 }}>{trip.diaryText ? '일기 전체 보기' : '일기 만들기'}<ChevronRight size={18} /></span>
+          <span className="row" style={{ gap: 2, color: 'var(--primary)', fontWeight: 600 }}>{trip.diaryText ? '일기 전체 보기' : 'AI 일기 쓰기'}<ChevronRight size={18} /></span>
         </button>
 
         <div style={{ display: 'grid', gap: 8, textAlign: 'center' }}>
-          <button className="btn primary block xl" disabled={driving || inProgress} onClick={() => navigate(`/community/new?trip=${trip.id}`)}><Users size={18} />커뮤니티에 공유하기</button>
+          <button className="btn primary block xl" disabled={driving || inProgress} onClick={() => navigate(`/community/new?trip=${trip.id}`)}><Users size={18} />커뮤니티 공유</button>
           <button className="btn secondary block" onClick={makeShare}>SNS 공유 카드 만들기</button>
           <span className="t-cap" style={{ fontSize: 12 }}>{inProgress ? '여행을 완료하면 커뮤니티에 공유할 수 있어요 · ' : ''}커뮤니티 게시물과 공유 카드에는 집 주소·GPS 이동 경로가 포함되지 않아요</span>
         </div>

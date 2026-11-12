@@ -1796,3 +1796,26 @@ button.place-row { cursor: pointer; }
 .arr-acts.single { grid-template-columns: minmax(0, 460px); justify-content: center; }
 .arr-note.leave { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--primary); font-weight: 600; }
 .arr-note.leave .link { font-weight: 700; }
+
+/* Figma M1 — 진행 중 여행 카드 · 다음 할 일 */
+.mh-brand { font-weight: 700; font-size: 18px; margin-top: 4px; }
+.mh-live-card { display: grid; gap: 6px; width: 100%; padding: 16px 18px; border: 0; border-radius: 20px; cursor: pointer; text-align: left; background: var(--primary); color: #fff; box-shadow: 0 8px 20px rgba(77,128,232,.25); }
+.mh-live-card .pill { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: #fff; color: var(--primary); font-size: 12px; font-weight: 700; }
+.mh-live-card .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: mhPulse 1.6s ease-in-out infinite; }
+.mh-live-card b { font-size: 18px; }
+.mh-live-card small { font-size: 13px; color: #E8F1FF; }
+.mh-live-card small.soft { font-size: 12px; opacity: .9; }
+.mh-todo { display: grid; gap: 8px; }
+.mh-todo .t { font-weight: 700; font-size: 16px; }
+.fab.wide { display: flex; align-items: center; height: 52px; width: auto; padding: 0 20px; gap: 6px; border-radius: 999px; font-weight: 700; font-size: 15px; }
+.seg-tabs { display: flex; gap: 6px; margin: 4px 0 12px; }
+.pt-center { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 22px 18px; }
+.pt-arrive { background: var(--mint, #DDF6ED); border-color: transparent; display: grid; gap: 8px; }
+.pt-arrive .t { font-weight: 700; font-size: 16px; }
+.my-list { padding: 0; overflow: hidden; }
+.my-list button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 0; background: none; text-align: left; cursor: pointer; border-bottom: 1px solid var(--border, #E3EAF4); }
+.my-list button:last-child { border-bottom: 0; }
+.my-list .grow { display: grid; gap: 1px; }
+.my-list b { font-weight: 500; font-size: 15px; }
+.pt-stats.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
+.pt-stats.three li { display: grid; gap: 2px; justify-items: center; padding: 10px 4px; background: var(--bg); border-radius: 12px; }

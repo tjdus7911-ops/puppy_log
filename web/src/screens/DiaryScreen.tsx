@@ -128,7 +128,7 @@ export default function DiaryScreen({ id, onChanged }: { id: string; onChanged: 
               <>
                 <button className="btn ghost" onClick={addPhotos}><ImagePlus size={18} />사진 추가</button>
                 {trip.diaryText && <button className="btn ghost" onClick={() => setDraft(trip.diaryText)}><Pencil size={18} />직접 수정</button>}
-                {trip.diaryText && <button className="btn secondary" disabled={busy} onClick={generate}><RefreshCw size={18} />{busy ? '만드는 중…' : '다시 만들기'}</button>}
+                {trip.diaryText && <button className="btn secondary" disabled={busy} onClick={generate}><RefreshCw size={18} />{busy ? '만드는 중…' : '다시 쓰기'}</button>}
               </>
             )}
           </div>

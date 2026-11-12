@@ -332,7 +332,7 @@ try {
   await step('여행 기록 → 커뮤니티에 공유하기 (사진·제목·장소 자동)', async () => {
     await page.goto(`${BASE}#/album?src=demo`);
     await page.locator('.card-btn').filter({ hasText: /강릉/ }).first().click();
-    await btn('커뮤니티에 공유하기').click();
+    await btn('커뮤니티 공유').click();
     await page.getByText('앨범에서 선택').waitFor();
     await page.getByText(/여행 기록에서 사진 \d+장을 불러왔어요/).waitFor({ timeout: 10000 });
     const sel = await page.locator('.ab-item.sel').count();

@@ -8,7 +8,6 @@ import type { Trip } from '../domain/models';
 import { formatDuration, formatKm, formatShortDate } from '../domain/format';
 import { regionShort } from '../domain/regions';
 import { EmptyState, Segmented, TopBar } from '../ui/components';
-import { PawGlyph } from '../ui/Art';
 import { PhotoFallback } from '../ui/kit';
 
 export function TripCard({ trip, compact = false, subtitle }: { trip: Trip; compact?: boolean; subtitle?: string }) {
@@ -63,16 +62,11 @@ export default function Album({ route }: { route: string }) {
   return (
     <div className="screen">
       <TopBar title="여행 기록" showBack={false} />
-      <button className="card-btn" style={{ width: '100%' }} onClick={() => navigate('/pawmap')}>
-        <div className="card row" style={{ gap: 14 }}>
-          <span className="icon-tile"><PawGlyph size={22} color="var(--primary)" /></span>
-          <div className="grow">
-            <p style={{ fontWeight: 600 }}>발도장 지도</p>
-            <p className="t-cap" style={{ marginTop: 2 }}>함께 다녀온 지역을 한눈에 봐요</p>
-          </div>
-          <ChevronRight size={20} color="var(--text-3)" />
-        </div>
-      </button>
+      {/* Figma M4: 앨범 · 발도장 지도 탭 */}
+      <div className="chips seg-tabs" role="tablist" aria-label="여행 기록 보기">
+        <button className="chip on" role="tab" aria-selected="true">앨범</button>
+        <button className="chip" role="tab" aria-selected="false" onClick={() => navigate('/pawmap')}>발도장 지도</button>
+      </div>
 
       {live.active && live.trip && (
         <button className="card-btn mt-12" style={{ width: '100%' }} onClick={() => navigate(live.driving ? '/trip/live' : '/home')}>

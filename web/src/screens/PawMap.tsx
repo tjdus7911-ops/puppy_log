@@ -49,6 +49,10 @@ export default function PawMap() {
 
   return (
     <div className="screen">
+      <div className="chips seg-tabs" role="tablist" aria-label="여행 기록 보기">
+        <button className="chip" role="tab" aria-selected="false" onClick={() => navigate('/album')}>앨범</button>
+        <button className="chip on" role="tab" aria-selected="true">발도장 지도</button>
+      </div>
       <header className="paw-head">
         <h1 className="h-xl">발도장 지도</h1>
         {hasDemo && <div style={{ width: 168 }}><Segmented ariaLabel="기록 종류" value={source} onChange={(v) => { setSource(v); setSel(null); }} options={[{ value: 'real', label: '실제 기록' }, { value: 'demo', label: '데모' }]} /></div>}

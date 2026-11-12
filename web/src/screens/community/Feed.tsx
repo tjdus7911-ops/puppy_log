@@ -12,7 +12,8 @@ import { EmptyState, Loading } from '../../ui/components';
 import { Author, DriveLock, MediaView } from './parts';
 
 type Tab = 'rec' | 'new' | 'follow' | 'place';
-const TABS: [Tab, string][] = [['rec', '추천'], ['new', '최신'], ['follow', '팔로우'], ['place', '여행지']];
+// Figma M7: 여행 피드 · 멍슐랭(장소 후기) · 멍친구
+const TABS: [Tab, string][] = [['rec', '여행 피드'], ['place', '멍슐랭'], ['follow', '멍친구']];
 
 export default function Feed() {
   const route = useRoute();
@@ -82,7 +83,7 @@ export default function Feed() {
         </div>
       )}
 
-      <button className="fab" aria-label="게시물 작성" onClick={() => navigate('/community/new')}><Plus size={28} /></button>
+      <button className="fab wide" aria-label="게시물 작성" onClick={() => navigate('/community/new')}><Plus size={20} />글쓰기</button>
     </div>
   );
 }
