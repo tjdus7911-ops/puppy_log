@@ -191,7 +191,6 @@ fun TripSetupScreen(vm: TripViewModel, onAddPet: () -> Unit) {
                             step = 0
                         }
                     }
-                    if (demo) ProvenanceBadge(Provenance.DEMO)
                 }
             }
         }
